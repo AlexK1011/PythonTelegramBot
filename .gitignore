@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# SQLite database files
+*.db
+*.sqlite3
+
+# PyCharm project files
+.idea/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# VSCode settings (если используете VSCode)
+.vscode/
+
+# Environment variables
+.env
+
+# Session files (например, для pyrogram)
+*.session
+*.session-journal
+
+# Log files
+*.log
+
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
