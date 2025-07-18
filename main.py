@@ -45,6 +45,7 @@ async def start(client, message):
 
 @bot.on_message(filters.forwarded)
 async def add_channel(client, message):
+    user_id = message.from_user.id
     global channels_list
     global add_channel_mode
     if not message.forward_from_chat or message.forward_from_chat.type.value != "channel":
@@ -57,8 +58,8 @@ async def add_channel(client, message):
             return
 
     if add_channel_mode:
-        if message.forward_from_chat and not db.channel_exists(message.forward_from_chat.id):
-            db.add_channel(message.forward_from_chat.id, message.forward_from_chat.title or "Без названия")
+        if message.forward_from_chat and not db.channel_exists(user_id, message.forward_from_chat.id):
+            db.add_channel(user_id, message.forward_from_chat.id, message.forward_from_chat.title or "Без названия")
             await message.reply(
                 f"Канал {message.forward_from_chat.title} добавлен!",
                 reply_markup=Keyboard
@@ -92,7 +93,8 @@ async def adding_channel(client, callback_query: CallbackQuery):
 
 @bot.on_callback_query(callback_data_filter("list_channels"))
 async def show_channels(client, callback_query: CallbackQuery):
-    channels = db.get_channels()
+    user_id = callback_query.from_user.id
+    channels = db.get_channels(user_id)
     if not channels:
         text = "Список каналов пуст"
     else:
@@ -124,11 +126,12 @@ async def nothing(client, callback_query: CallbackQuery):
 
 @bot.on_callback_query(callback_data_filter("confirm_add_channel"))
 async def confirm_add_channel(client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
     global channels_list
     channel_id = channels_list["id"]
     title = channels_list["title"]
     if channel_id and title:  # Проверяем, что данные есть
-        db.add_channel(channel_id, title)
+        db.add_channel(user_id, channel_id, title)
         await callback_query.answer("Канал добавлен!")
         await callback_query.message.edit_text(
             f"Канал {title} добавлен!",
@@ -143,7 +146,8 @@ async def confirm_add_channel(client, callback_query: CallbackQuery):
 
 @bot.on_callback_query(callback_data_filter("delete_channel"))
 async def start_deleting_channel(client, callback_query: CallbackQuery):
-    channels = db.get_channels()
+    user_id = callback_query.from_user.id
+    channels = db.get_channels(user_id)
     if not channels:
         text = "Список каналов пуст"
     else:
@@ -155,12 +159,16 @@ async def start_deleting_channel(client, callback_query: CallbackQuery):
 
         # Объединяем все строки
         text = "Введите номер канала который нужно удалить:\n" + "\n".join(channel_lines)
+        global delete_channel_mode
+        delete_channel_mode = True
+
     await callback_query.message.reply(text)
     await callback_query.answer("")
 
 
 @bot.on_message(filters.text)
 async def delete_channel(client, message):
+    user_id = message.from_user.id
     global delete_channel_mode
     if delete_channel_mode:
         number = message.text
@@ -171,7 +179,7 @@ async def delete_channel(client, message):
                 await message.reply("Некорректное число", reply_markup=Keyboard)
                 delete_channel_mode = False
                 return
-            channels = db.get_channels()
+            channels = db.get_channels(user_id)
             if number >= len(channels) or number <= 0:
                 await message.reply("Нет такого канала", reply_markup=Keyboard)
                 delete_channel_mode = False
@@ -183,7 +191,6 @@ async def delete_channel(client, message):
         else:
             await message.reply("Некорректное число", reply_markup=Keyboard)
             delete_channel_mode = False
-
 
 
 
