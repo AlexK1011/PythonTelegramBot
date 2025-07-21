@@ -1,39 +1,36 @@
+import asyncio
+import json
 import os
 
+from redis.asyncio import Redis
+from pyrogram.errors import FloodWait
+
+from bots import bot, monitor_bot
 
 import pyrogram
 import sqlite3
 import db
 from keybpards import Keyboard, add_or_not
+from monitor_channels import monitor_channels
 
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from dotenv import load_dotenv
+import logging
+logging.basicConfig(level=logging.INFO)
 
-
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
 
 
 db.init_db()
 
-bot = Client(
-    "my_bot",
-    bot_token=BOT_TOKEN,
-    api_id=API_ID,
-    api_hash=API_HASH
-)
-
+r = Redis(host='localhost', port=6379, db=0)
 add_channel_mode = False
 delete_channel_mode = False
 
 
 
 channels_list = {
-    "channel_id": '',
+    "id": '',
     "title": ''
 }
 
@@ -60,6 +57,7 @@ async def add_channel(client, message):
     if add_channel_mode:
         if message.forward_from_chat and not db.channel_exists(user_id, message.forward_from_chat.id):
             db.add_channel(user_id, message.forward_from_chat.id, message.forward_from_chat.title or "Без названия")
+            print(message.forward_from_chat.username)
             await message.reply(
                 f"Канал {message.forward_from_chat.title} добавлен!",
                 reply_markup=Keyboard
@@ -170,29 +168,59 @@ async def start_deleting_channel(client, callback_query: CallbackQuery):
 async def delete_channel(client, message):
     user_id = message.from_user.id
     global delete_channel_mode
+
     if delete_channel_mode:
-        number = message.text
+        number = message.text.strip()
         if number.isdigit():
             try:
                 number = int(number)
-            except ValueError:
-                await message.reply("Некорректное число", reply_markup=Keyboard)
-                delete_channel_mode = False
-                return
-            channels = db.get_channels(user_id)
-            if number >= len(channels) or number <= 0:
-                await message.reply("Нет такого канала", reply_markup=Keyboard)
-                delete_channel_mode = False
-                return
-            channel_id, title = channels[number - 1]
-            db.delete_channel(channel_id)
-            await message.reply(f"Канал {title} удален!")
-            delete_channel_mode = False
+                channels = db.get_channels(user_id)
+
+                if 1 <= number <= len(channels):
+                    channel_id, title = channels[number - 1]
+                    db.delete_channel(user_id, channel_id)
+                    await message.reply(f"✅ Канал '{title}' удалён!", reply_markup=Keyboard)
+                else:
+                    await message.reply("❌ Нет канала с таким номером. Пожалуйста, введите правильный номер.",
+                                        reply_markup=Keyboard)
+
+            except Exception as e:
+                await message.reply(f"❌ Произошла ошибка при удалении канала: ", reply_markup=Keyboard)
+
+            delete_channel_mode = False  # Сбрасываем режим удаления в любом случае
+
         else:
-            await message.reply("Некорректное число", reply_markup=Keyboard)
+            await message.reply("❌ Пожалуйста, введите номер канала цифрами.", reply_markup=Keyboard)
             delete_channel_mode = False
 
 
 
 
-bot.run()
+async def process_pubsub_messages():
+    pubsub = r.pubsub()
+    await pubsub.subscribe("new_posts")
+    logging.info("👂 Подписан на канал 'new_posts'")
+
+    # get_message — неблокирующий вариант
+    while True:
+        msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+        if msg and msg["type"] == "message":
+            data = json.loads(msg["data"])
+            text = data["message_text"]
+            for uid in data["user_ids"]:
+                try:
+                    await bot.send_message(uid, text[:4096])
+                except FloodWait as e:
+                    await asyncio.sleep(e.value)
+        await asyncio.sleep(0.1)  # уступаем управление другим таскам
+
+# 5) стартуем всё
+if __name__ == "__main__":
+    # 5.1) запускаем бот (инициализируется loop, регистрируются декораторы)
+    bot.start()
+    # 5.2) создаём фоновую задачу внутри того же loop
+    asyncio.get_event_loop().create_task(process_pubsub_messages())
+    # 5.3) уходим в idle — теперь обрабатываются и /start, и колбеки
+    idle()
+    # 5.4) по Ctrl+C завершаем клиент
+    bot.stop()
