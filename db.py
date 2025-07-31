@@ -16,6 +16,7 @@ def init_db():
                   id       INTEGER,
                   user_id  INTEGER,
                   title    TEXT,
+                  username TEXT,
                   added_at TEXT DEFAULT CURRENT_TIMESTAMP,
                   PRIMARY KEY (id, user_id)
               )
@@ -35,14 +36,12 @@ def init_db():
     conn.close()
 
 
-def add_channel(user_id, channel_id, title):
+def add_channel(user_id, channel_id, title, username):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-
-    # Добавляем канал для пользователя
     c.execute(
-        "INSERT OR IGNORE INTO channels (id, user_id, title) VALUES (?, ?, ?)",
-        (channel_id, user_id, title)
+        "INSERT OR IGNORE INTO channels (id, user_id, title, username) VALUES (?, ?, ?, ?)",
+        (channel_id, user_id, title, username)
     )
 
     # Создаем запись в last_posts (если её еще нет)
@@ -105,10 +104,9 @@ def delete_channel(user_id, channel_id):
 
 
 def get_unique_channels():
-    """Получить все уникальные каналы (без дублирования)"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT DISTINCT id, title FROM channels ORDER BY id")
+    c.execute("SELECT DISTINCT id, title, username FROM channels ORDER BY id")
     channels = c.fetchall()
     conn.close()
     return channels

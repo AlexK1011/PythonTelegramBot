@@ -35,17 +35,22 @@ async def start(message):
 async def add_channel(message):
     user_id = message.from_user.id
     add_mode, _ = get_user_state(user_id)
+    username = message.forward_from_chat.username
+    title = message.forward_from_chat.title or "Без названия"
+    channel_id = message.forward_from_chat.id
+
     if add_mode:
-        if not db.channel_exists(user_id, message.forward_from_chat.id):
-            db.add_channel(user_id, message.forward_from_chat.id, message.forward_from_chat.title or "Без названия")
-            await message.reply(f"Канал {message.forward_from_chat.title} добавлен!", reply_markup=Keyboard)
+        if not db.channel_exists(user_id, channel_id):
+            db.add_channel(user_id, channel_id, title, username)
+            await message.reply(f"Канал {title} добавлен!", reply_markup=Keyboard)
         else:
-            await message.reply(f"Канал {message.forward_from_chat.title} уже добавлен!", reply_markup=Keyboard)
+            await message.reply(f"Канал {title} уже добавлен!", reply_markup=Keyboard)
         set_add_channel_mode(user_id, False)
     else:
         set_channels_list(user_id, {
-            "id": message.forward_from_chat.id,
-            "title": message.forward_from_chat.title or "Без названия"
+            "id": channel_id,
+            "title": title,
+            "username": username
         })
         await message.reply("Вы пытаетесь добавить этот канал?", reply_markup=add_or_not)
 
@@ -79,13 +84,14 @@ async def confirm_add_channel(callback_query):
     channel_info = get_channels_list(user_id)
     channel_id = channel_info["id"]
     title = channel_info["title"]
+    username = channel_info.get("username")
     if channel_id and title:
-        db.add_channel(user_id, channel_id, title)
+        db.add_channel(user_id, channel_id, title, username)
         await callback_query.answer("Канал добавлен!")
         await callback_query.message.edit_text(f"Канал {title} добавлен!", reply_markup=Keyboard)
     else:
         await callback_query.answer("Нет данных для добавления канала")
-    set_channels_list(user_id, {"id": '', "title": ''})
+    set_channels_list(user_id, {"id": '', "title": '', "username": ''})
 
 @router.callback_query(F.data == "delete_channel")
 async def start_deleting_channel(callback_query):
