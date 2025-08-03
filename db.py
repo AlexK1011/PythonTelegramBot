@@ -32,6 +32,16 @@ def init_db():
               )
               ''')
 
+    c.execute('''
+              CREATE TABLE IF NOT EXISTS settings
+              (
+                  user_id INTEGER PRIMARY KEY,
+                  delay   INTEGER DEFAULT 3600,
+                  min_forward_rate REAL DEFAULT 1
+              )
+              ''')
+
+
     conn.commit()
     conn.close()
 
@@ -89,7 +99,7 @@ def delete_channel(user_id, channel_id):
         "DELETE FROM channels WHERE user_id = ? AND id = ?",
         (user_id, channel_id)
     )
-    # Также удаляем запись о последнем посте, если больше нет пользователей для этого канала
+
     c.execute('''
         DELETE FROM last_posts 
         WHERE channel_id = ? 
@@ -99,8 +109,6 @@ def delete_channel(user_id, channel_id):
     ''', (channel_id, channel_id))
     conn.commit()
     conn.close()
-
-
 
 
 def get_unique_channels():
@@ -143,3 +151,38 @@ def set_last_post_id(channel_id, message_id):
     conn.commit()
     conn.close()
 
+
+def set_settings(user_id: int, column: str, value):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(f"SELECT user_id FROM settings WHERE user_id = ?", (user_id,))
+    exists = c.fetchone()
+
+    if exists:
+        # Обновляем нужную колонку
+        c.execute(f"UPDATE settings SET {column} = ? WHERE user_id = ?", (value, user_id))
+    else:
+        c.execute(f"INSERT INTO settings (user_id, {column}) VALUES (?, ?)", (user_id, value))
+    conn.commit()
+    conn.close()
+
+
+def get_settings(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT * FROM settings WHERE user_id = ?", (user_id,))
+    settings = c.fetchone()
+    conn.close()
+
+    if settings is None:
+        return {
+            "user_id": user_id,
+            "delay": 3600,
+            "min_forward_rate": 1.0
+        }
+
+    return {
+        "user_id": settings[0],
+        "delay": settings[1],
+        "min_forward_rate": settings[2]
+    }
