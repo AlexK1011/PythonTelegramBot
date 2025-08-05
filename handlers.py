@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.filters import CommandStart
 import re
 import db
-from keyboards import Keyboard, add_or_not, settings
+import keyboards as kb
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 
@@ -30,7 +30,7 @@ router = Router()
 @router.message(CommandStart())
 async def start(message, state: FSMContext):
     await state.clear()
-    await message.reply("Hello, I'm a bot!", reply_markup=Keyboard)
+    await message.reply("Hello, I'm a bot!", reply_markup=kb.Keyboard)
 
 @router.message(lambda m: m.forward_from_chat and m.forward_from_chat.type == 'channel')
 async def add_channel(message, state: FSMContext):
@@ -38,27 +38,23 @@ async def add_channel(message, state: FSMContext):
     username = message.forward_from_chat.username
     title = message.forward_from_chat.title or "Без названия"
     channel_id = message.forward_from_chat.id
-    current_state = await state.get_state()
+    user_channels = db.get_channels(user_id)
 
-    if current_state == UserState.add_channel.state:
+    if len(user_channels) >= 50:
+        await message.reply(f"❌ Превышено максимальное количество каналов (50)", reply_markup=kb.Keyboard)
+        await state.clear()
+        return
+
+    if username is not None:
         if not db.channel_exists(user_id, channel_id):
             db.add_channel(user_id, channel_id, title, username)
-            await message.reply(f"Канал {title} добавлен!", reply_markup=Keyboard)
+            await message.reply(f"Канал {title} добавлен!", reply_markup=kb.Keyboard)
         else:
-            await message.reply(f"Канал {title} уже добавлен!", reply_markup=Keyboard)
-        await state.clear()
+            await message.reply(f"Канал {title} уже добавлен!", reply_markup=kb.Keyboard)
     else:
-        set_channels_list(user_id, {
-            "id": channel_id,
-            "title": title,
-            "username": username
-        })
-        await message.reply("Вы пытаетесь добавить этот канал?", reply_markup=add_or_not)
+        await message.reply(f"❌ мониторить можно только публичные каналы", reply_markup=kb.Keyboard)
+    await state.clear()
 
-@router.callback_query(F.data == "add_channel")
-async def adding_channel(callback_query, state: FSMContext):
-    await state.set_state(UserState.add_channel)
-    await callback_query.answer("Перешлите сообщение из канала, который нужно добавить")
 
 @router.callback_query(F.data == "list_channels")
 async def show_channels(callback_query):
@@ -70,29 +66,8 @@ async def show_channels(callback_query):
         channel_lines = [f"{i+1}. {title}" for i, (_, title) in enumerate(channels)]
         text = "Сохраненные каналы:\n" + "\n".join(channel_lines)
     await callback_query.answer()
-    await callback_query.message.edit_text(text, reply_markup=Keyboard)
+    await callback_query.message.edit_text(text, reply_markup=kb.Keyboard)
 
-@router.callback_query(F.data == "dont_add")
-async def nothing(callback_query, state: FSMContext):
-    user_id = callback_query.from_user.id
-    set_channels_list(user_id, {"id": '', "title": ''})
-    await state.clear()
-    await callback_query.answer("отменено")
-
-@router.callback_query(F.data == "confirm_add_channel")
-async def confirm_add_channel(callback_query):
-    user_id = callback_query.from_user.id
-    channel_info = get_channels_list(user_id)
-    channel_id = channel_info["id"]
-    title = channel_info["title"]
-    username = channel_info.get("username")
-    if channel_id and title:
-        db.add_channel(user_id, channel_id, title, username)
-        await callback_query.answer("Канал добавлен!")
-        await callback_query.message.edit_text(f"Канал {title} добавлен!", reply_markup=Keyboard)
-    else:
-        await callback_query.answer("Нет данных для добавления канала")
-    set_channels_list(user_id, {"id": '', "title": '', "username": ''})
 
 @router.callback_query(F.data == "delete_channel")
 async def start_deleting_channel(callback_query, state: FSMContext):
@@ -104,34 +79,70 @@ async def start_deleting_channel(callback_query, state: FSMContext):
         channel_lines = [f"{i+1}. {title}" for i, (_, title) in enumerate(channels)]
         text = "Введите номер канала который нужно удалить:\n" + "\n".join(channel_lines)
         await state.set_state(UserState.delete_channel)
-    await callback_query.message.reply(text)
+    await callback_query.message.edit_text(text, reply_markup=kb.cancel)
     await callback_query.answer()
 
-@router.message(UserState.delete_channel, F.text.isdigit())
+@router.message(UserState.delete_channel)
 async def delete_channel(message, state: FSMContext):
     user_id = message.from_user.id
-    number = int(message.text.strip())
+    pattern = r'\d+'
+    numbers = re.findall(pattern, message.text)
     channels = db.get_channels(user_id)
-    if 1 <= number <= len(channels):
-        channel_id, title = channels[number - 1]
-        db.delete_channel(user_id, channel_id)
-        await message.reply(f"✅ Канал '{title}' удалён!", reply_markup=Keyboard)
+    deleted = 0
+    valid = []
+    invalid = []
+    for number in numbers:
+        number = int(number)
+        if 1 <= number <= len(channels):
+            channel_id, title = channels[number - 1]
+            db.delete_channel(user_id, channel_id)
+            deleted += 1
+            valid.append(title)
+            # await message.reply(f"✅ Канал '{title}' удалён!", reply_markup=kb.Keyboard)
+        else:
+            invalid.append(number)
+    if deleted > 0:
+        if deleted == 1:
+            await message.reply(f"✅ канал '{valid[0]}' удалён!{"\n Однако, не удалось удалить каналы с номерами: " + ", ".join(str(num) for num in invalid)  if len(invalid) > 0 else ""}", reply_markup=kb.Keyboard)
+        elif deleted == 2:
+            await message.reply(f"✅ каналы '{valid[0]}' и '{valid[1]}' удалены!{"\n Однако, не удалось удалить каналы с номерами: " + ", ".join(str(num) for num in invalid)  if len(invalid) > 0 else ""}", reply_markup=kb.Keyboard)
+        else:
+            await message.reply(f"✅ {deleted} каналов удалены!{"\n Однако, не удалось удалить каналы с номерами: " + ", ".join(str(num) for num in invalid)  if len(invalid) > 0 else ""}", reply_markup=kb.Keyboard)
     else:
-        await message.reply("❌ Нет канала с таким номером. Пожалуйста, введите правильный номер.", reply_markup=Keyboard)
+        await message.reply(f"❌ Не удалось удалить эти каналы. Проверьте номера и повторите попытку.", reply_markup=kb.Keyboard)
     await state.clear()
-
-
-@router.message(UserState.delete_channel, ~F.text.isdigit())
-async def reset_delete_mode(message, state: FSMContext):
-    user_id = message.from_user.id
-    await message.reply("❌ Пожалуйста, введите номер канала цифрами.", reply_markup=Keyboard)
-    await state.clear()
-
 
 
 @router.callback_query(F.data == "settings")
 async def show_settings(callback_query):
-    await callback_query.message.edit_text("Настройки", reply_markup=settings)
+    user_id = callback_query.from_user.id
+    settings = db.get_settings(user_id)
+
+    delay_seconds = settings.get("delay", 3600)
+    delay_hours = delay_seconds // 3600
+    delay_minutes = (delay_seconds % 3600) // 60
+
+    if delay_hours > 0 and delay_minutes > 0:
+        delay_text = f"{delay_hours} ч {delay_minutes} мин"
+    elif delay_hours > 0:
+        delay_text = f"{delay_hours} ч"
+    else:
+        delay_text = f"{delay_minutes} мин"
+
+    reposts_percent = settings.get("min_forward_rate", 1.0)
+    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) else f"{reposts_percent}%"
+
+    await callback_query.message.edit_text(f"""⚙️ Настройки
+
+1. <b>Задержка</b> - время ожидания перед анализом статистики поста. Бот будет ждать указанное время, а затем проверять процент репостов. Это нужно для сбора полной статистики поста.
+
+2. <b>Минимальный процент репостов</b> - пороговое значение репостов в процентах от просмотров. Пост будет отправлен вам только если процент репостов достигнет или превысит это значение.
+
+Нажмите на нужную настройку для изменения.
+
+📋 <b>Текущие настройки:</b>
+• Задержка: <b>{delay_text}</b>
+• Минимальный процент репостов: <b>{reposts_text}</b>""", reply_markup=kb.settings, parse_mode="html")
     await callback_query.answer()
 
 
@@ -165,23 +176,23 @@ async def save_delay(message, state: FSMContext):
         total_seconds = round(total_seconds)
 
         if total_seconds == 0:
-            await message.reply(f"❌ задержка не может быть нулевой", reply_markup=Keyboard)
+            await message.reply(f"❌ задержка не может быть нулевой", reply_markup=kb.Keyboard)
             await state.clear()
             return
         elif total_seconds > 86400:
-            await message.reply(f"❌ задержка не может быть больше 24 часов", reply_markup=Keyboard)
+            await message.reply(f"❌ задержка не может быть больше 24 часов", reply_markup=kb.Keyboard)
             await state.clear()
             return
 
         db.set_settings(user_id, "delay", total_seconds)
 
         if int_part == 0 and minutes > 0:
-            await message.reply(f"✅ Время задержки изменено на {minutes} минут!", reply_markup=Keyboard)
+            await message.reply(f"✅ Время задержки изменено на {minutes} минут!", reply_markup=kb.Keyboard)
         elif int_part > 0 and minutes == 0:
-            await message.reply(f"✅ Время задержки изменено на {int_part} часов!", reply_markup=Keyboard)
+            await message.reply(f"✅ Время задержки изменено на {int_part} часов!", reply_markup=kb.Keyboard)
         else:
             await message.reply(f"✅ Время задержки изменено на {int_part} часов, {minutes} минут!",
-                                reply_markup=Keyboard)
+                                reply_markup=kb.Keyboard)
 
         await state.clear()
 
@@ -190,7 +201,7 @@ async def save_delay(message, state: FSMContext):
         # Разделенный ввод: часы и минуты
         if numbers[0][1] and numbers[0][1] != "":
             await message.reply(f"❌ при указании отдельно часов и минут, количество часов не может быть дробным",
-                                reply_markup=Keyboard)
+                                reply_markup=kb.Keyboard)
             await state.clear()
             return
 
@@ -205,27 +216,27 @@ async def save_delay(message, state: FSMContext):
         total_seconds = round(total_seconds)
 
         if total_seconds == 0:
-            await message.reply(f"❌ задержка не может быть нулевой", reply_markup=Keyboard)
+            await message.reply(f"❌ задержка не может быть нулевой", reply_markup=kb.Keyboard)
             await state.clear()
             return
         elif total_seconds > 86400:
-            await message.reply(f"❌ задержка не может быть больше 24 часов", reply_markup=Keyboard)
+            await message.reply(f"❌ задержка не может быть больше 24 часов", reply_markup=kb.Keyboard)
             await state.clear()
             return
 
         db.set_settings(user_id, "delay", total_seconds)
 
         if hours == 0:
-            await message.reply(f"✅ Время задержки изменено на {minutes} минут!", reply_markup=Keyboard)
+            await message.reply(f"✅ Время задержки изменено на {minutes} минут!", reply_markup=kb.Keyboard)
         elif minutes == 0:
-            await message.reply(f"✅ Время задержки изменено на {hours} часов!", reply_markup=Keyboard)
+            await message.reply(f"✅ Время задержки изменено на {hours} часов!", reply_markup=kb.Keyboard)
         else:
-            await message.reply(f"✅ Время задержки изменено на {hours} часов, {minutes} минут!", reply_markup=Keyboard)
+            await message.reply(f"✅ Время задержки изменено на {hours} часов, {minutes} минут!", reply_markup=kb.Keyboard)
 
         await state.clear()
 
     else:
-        await message.reply("❌ не удалось распознать время", reply_markup=Keyboard)
+        await message.reply("❌ не удалось распознать время", reply_markup=kb.Keyboard)
         await state.clear()
 
 
@@ -249,7 +260,7 @@ async def save_reposts_rate(message, state: FSMContext):
     number = re.findall(pattern, text)[0]
     number = safe_float(number)
     if number <= 0 or number > 100:
-        await message.reply(f"❌ Пожалуйста, введите число от 1 до 100", reply_markup=Keyboard)
+        await message.reply(f"❌ Пожалуйста, введите число от 1 до 100", reply_markup=kb.Keyboard)
         await state.clear()
         return
 
@@ -259,5 +270,12 @@ async def save_reposts_rate(message, state: FSMContext):
         show_number = number
 
     db.set_settings(user_id, "min_forward_rate", number)
-    await message.reply(f"✅ Процент репостов изменен на {show_number}%", reply_markup=Keyboard)
+    await message.reply(f"✅ Процент репостов изменен на {show_number}%", reply_markup=kb.Keyboard)
     await state.clear()
+
+
+@router.callback_query(F.data == "back_to_main")
+async def back_to_main(callback_query, state: FSMContext):
+    await state.clear()
+    await callback_query.message.edit_text("Главное меню", reply_markup=kb.Keyboard)
+    await callback_query.answer()

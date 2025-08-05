@@ -9,9 +9,8 @@ from monitor_channels import monitor_channels
 from bots import monitor_bot
 
 import db
-from keyboards import Keyboard, add_or_not
 from monitor_channels import monitor_channels
-from handlers import router  # Импортируем router с хендлерами
+from handlers import router
 
 
 load_dotenv()
