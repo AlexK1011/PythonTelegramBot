@@ -1,4 +1,6 @@
 import os
+
+from aiogram import Bot
 from pyrogram import Client
 from dotenv import load_dotenv
 
@@ -9,12 +11,7 @@ API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
 # Основной бот для взаимодействия с пользователями
-bot = Client(
-    "my_bot",
-    bot_token=BOT_TOKEN,
-    api_id=API_ID,
-    api_hash=API_HASH
-)
+bot = Bot(token=BOT_TOKEN)
 
 # Userbot для мониторинга каналов
 monitor_bot = Client(
