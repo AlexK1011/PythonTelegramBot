@@ -37,7 +37,10 @@ def init_db():
               (
                   user_id INTEGER PRIMARY KEY,
                   delay   INTEGER DEFAULT 3600,
-                  min_forward_rate REAL DEFAULT 1
+                  min_forward_rate REAL DEFAULT 1,
+                  ai_enabled INTEGER DEFAULT 0,
+                  system_prompt TEXT DEFAULT NULL
+                  
               )
               ''')
 
@@ -67,7 +70,7 @@ def get_channels(user_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "SELECT id, title FROM channels WHERE user_id = ? ORDER BY added_at ASC;",
+        "SELECT id, title FROM channels WHERE user_id = ? ORDER BY added_at",
         (user_id,)
     )
     channels = c.fetchall()
@@ -114,7 +117,9 @@ def delete_channel(user_id, channel_id):
 def get_unique_channels():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    # @lang sqlite
     c.execute("SELECT DISTINCT id, title, username FROM channels ORDER BY id")
+
     channels = c.fetchall()
     conn.close()
     return channels
@@ -178,11 +183,15 @@ def get_settings(user_id):
         return {
             "user_id": user_id,
             "delay": 3600,
-            "min_forward_rate": 1.0
+            "min_forward_rate": 1.0,
+            "ai_enabled": 0,
+            "system_prompt": ""
         }
 
     return {
         "user_id": settings[0],
         "delay": settings[1],
-        "min_forward_rate": settings[2]
+        "min_forward_rate": settings[2],
+        "ai_enabled": settings[3],
+        "system_prompt": settings[4]
     }

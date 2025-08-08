@@ -7,12 +7,14 @@ from aiogram.fsm.state import StatesGroup, State
 import keyboards as kb
 
 import db
+from config import get_settings_text
 
 settings_router = Router()
 class SettingsState(StatesGroup):
     set_delay = State()
-    min_forward_rate = State()
     set_reposts_rate = State()
+    enable_ai = State()
+    set_system_prompt = State()
 
 @settings_router.callback_query(F.data == "settings")
 async def show_settings(callback_query):
@@ -31,19 +33,11 @@ async def show_settings(callback_query):
         delay_text = f"{delay_minutes} мин"
 
     reposts_percent = settings.get("min_forward_rate", 1.0)
-    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) else f"{reposts_percent}%"
+    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) else f"{round(reposts_percent, 2)}%"
+    ai_enabled = settings.get("ai_enabled", 0)
+    settings_text = get_settings_text(delay_text, reposts_text, ai_enabled)
 
-    await callback_query.message.edit_text(f"""⚙️ Настройки
-
-1. <b>Задержка</b> - время ожидания перед анализом статистики поста. Бот будет ждать указанное время, а затем проверять процент репостов. Это нужно для сбора полной статистики поста.
-
-2. <b>Минимальный процент репостов</b> - пороговое значение репостов в процентах от просмотров. Пост будет отправлен вам только если процент репостов достигнет или превысит это значение.
-
-Нажмите на нужную настройку для изменения.
-
-📋 <b>Текущие настройки:</b>
-• Задержка: <b>{delay_text}</b>
-• Минимальный процент репостов: <b>{reposts_text}</b>""", reply_markup=kb.settings, parse_mode="html")
+    await callback_query.message.edit_text(settings_text, reply_markup=kb.settings, parse_mode="html")
     await callback_query.answer()
 
 
@@ -173,4 +167,60 @@ async def save_reposts_rate(message, state: FSMContext):
     db.set_settings(user_id, "min_forward_rate", number)
     await message.reply(f"✅ Процент репостов изменен на {show_number}%", reply_markup=kb.Keyboard)
     await state.clear()
+
+
+@settings_router.callback_query(F.data == "enable_ai")
+async def enable_ai(callback_query, state: FSMContext):
+    await state.set_state(SettingsState.enable_ai)
+    await callback_query.message.edit_text("Вы хотите использовать обработку постов через ИИ?")
+    await callback_query.answer()
+
+
+@settings_router.message(SettingsState.enable_ai)
+async def ask_system_prompt(message, state: FSMContext):
+    text = message.text.strip()
+
+    if text.lower() == "да":
+        answer = True
+    elif text.lower() == "нет":
+        answer = False
+    else:
+        await message.reply("❌ Пожалуйста, введите да или нет")
+        return
+
+    current_settings = db.get_settings(message.from_user.id)
+    if answer == bool(current_settings["ai_enabled"]):
+        await message.reply("ИИ уже включен" if answer else "ИИ уже выключен")
+        return
+
+    if answer:
+        await state.set_state(SettingsState.set_system_prompt)
+        await message.reply("Теперь введите промпт, который будет использоваться для обработки постов через ИИ")
+    else:
+        db.set_settings(message.from_user.id, "ai_enabled", False)
+        db.set_settings(message.from_user.id, "system_prompt", "")
+        await message.reply("✅ ИИ выключен!", reply_markup=kb.Keyboard)
+        await state.clear()
+
+
+@settings_router.message(SettingsState.set_system_prompt)
+async def save_system_prompt(message, state: FSMContext):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    if text == "":
+        await message.reply("❌ Пожалуйста, введите промпт")
+        return
+    elif len(text) <= 5:
+        await message.reply("❌ промпт должен быть длиннее 5 символов")
+        return
+
+    db.set_settings(user_id, "ai_enabled", True)
+    db.set_settings(user_id, "system_prompt", text)
+    await message.reply("✅ Промпт сохранен!", reply_markup=kb.Keyboard)
+    await state.clear()
+
+
+
+
+
 

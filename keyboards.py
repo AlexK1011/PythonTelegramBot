@@ -20,7 +20,8 @@ Keyboard = InlineKeyboardMarkup(inline_keyboard=[
 
 settings = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text="1", callback_data="delay"), InlineKeyboardButton(text="2", callback_data="reposts")
+        InlineKeyboardButton(text="1", callback_data="delay"), InlineKeyboardButton(text="2", callback_data="reposts"),
+        InlineKeyboardButton(text="3", callback_data="enable_ai")
     ],
     [
         InlineKeyboardButton(text="назад", callback_data="back_to_main")

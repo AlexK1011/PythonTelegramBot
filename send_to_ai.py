@@ -1,5 +1,5 @@
 import os
-from config import system_prompt_for_russian_market
+
 import requests
 
 
@@ -8,7 +8,7 @@ API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 
 
-def send_to_deepseek(prompt) -> str:
+async def send_to_deepseek(text, system_prompt) -> str:
     """Отправляет запрос к DeepSeek‑R1‑0528 и возвращает только финальный ответ."""
     try:
 
@@ -22,8 +22,8 @@ def send_to_deepseek(prompt) -> str:
         json_request = {
             "model": "deepseek/deepseek-r1-0528:free",
             "messages": [
-                {"role": "system", "content": system_prompt_for_russian_market},
-                {"role": "user", "content": str(prompt)}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": str(text)}
             ],
             "max_tokens": max_context_tokens
         }
