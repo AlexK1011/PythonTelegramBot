@@ -1,11 +1,9 @@
 import asyncio
 from pyrogram.errors import FloodWait
-
+from config import delay_for_channel, monitor_interval
 import db
 from bots import monitor_bot
 from post_processor import PostProcessor
-
-delay_for_channel = 3
 
 
 async def monitor_channels():
@@ -39,10 +37,12 @@ async def monitor_channels():
 
                     for msg in reversed(new_msgs):
                         post_info = {
-                            "channel_id": channel_id,
+                            "channel_id": username,
                             "post_id": msg.id,
                             "user_ids": db.get_users_for_channel(channel_id),
-                            "message_text": msg.text or msg.caption or "Медиа-сообщение"
+                            "message_text": msg.text or msg.caption or "Медиа-сообщение",
+                            "message_link": f"https://t.me/{username}/{msg.id}",
+                            "channel_title": title
                         }
                         processor = PostProcessor(post_info)
                         await processor.distribute_post()
@@ -59,6 +59,6 @@ async def monitor_channels():
         except Exception as e:
             print(f"❌ Общая ошибка мониторинга: {e}")
 
-        await asyncio.sleep(60)
+        await asyncio.sleep(monitor_interval)
 
 
