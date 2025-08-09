@@ -69,3 +69,9 @@ def get_settings_text(delay_text, reposts_text,ai_enabled):
 • Задержка: <b>{delay_text}</b>
 • Минимальный процент репостов: <b>{reposts_text}</b>
 • ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
+
+rate_limit = 10
+time_window = 10
+max_tokens = 33000
+max_retries = 5
+base_delay = 1

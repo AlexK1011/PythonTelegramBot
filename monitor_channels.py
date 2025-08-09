@@ -29,7 +29,7 @@ async def monitor_channels():
 
                     all_msgs = [msg async for msg in monitor_bot.get_chat_history(
                         chat_id=username,
-                        limit=5
+                        limit=20
                     )]
                     new_msgs = [m for m in all_msgs if m.id > last_id]
                     if not new_msgs:

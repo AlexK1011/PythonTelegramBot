@@ -53,7 +53,11 @@ class PostProcessor:
         answer = ''
         text = self.post_info["message_text"]
         if user_settings.ai_enabled:
-            answer = await send_to_deepseek(text, user_settings.system_prompt)
+            try:
+                answer = await send_to_deepseek(text, user_settings.system_prompt)
+            except Exception as e:
+                print(f"Ошибка ИИ (default_processing): {e}")
+                answer = text
 
 
 
@@ -78,7 +82,11 @@ class PostProcessor:
 
         for i in range(3):
             print(f"Попытка {i}. Отправляем в DeepSeek")
-            answer = await send_to_deepseek(text, system_prompt_for_russian_market)
+            try:
+                answer = await send_to_deepseek(text, system_prompt_for_russian_market)
+            except Exception as e:
+                print(f"Ошибка ИИ (russian_market_processing): {e}")
+                answer = text
             safe_response = html.escape(answer)
 
             match = re.search(r'\|\|%HEADER%\|\|(.+?)\|\|%HEADER%\|\|(.*)', safe_response, re.DOTALL)
