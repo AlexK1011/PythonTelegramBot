@@ -5,7 +5,7 @@ import db
 from UserSettings import UserSettings
 from bots import monitor_bot, bot
 from send_to_ai import send_to_deepseek
-from config import default_delay, system_prompt_for_russian_market
+from config import default_delay, system_prompt_for_russian_market, get_text_from
 
 
 class PostProcessor:
@@ -19,7 +19,8 @@ class PostProcessor:
             asyncio.create_task(self.monitor_post(delay, uid))
 
     async def monitor_post(self, delay, uid):
-        print(f"⏳ Проверяем пост {self.post_info['post_id']} в канале {self.post_info['channel_id']}, спим {delay} секунд")
+        print(
+            f"⏳ Проверяем пост {self.post_info['post_id']} в канале {self.post_info['channel_id']}, спим {delay} секунд")
         await asyncio.sleep(delay)
 
         user_settings = UserSettings(uid)
@@ -43,7 +44,6 @@ class PostProcessor:
         else:
             return False, forward_rate, forwards
 
-
     async def default_processing(self, user_settings):
         print("⏳ Проверяем пост")
         is_need_to_send, forward_rate, forwards = await self.need_to_send(user_settings.min_forward_rate)
@@ -59,16 +59,14 @@ class PostProcessor:
                 print(f"Ошибка ИИ (default_processing): {e}")
                 answer = text
 
-
-
-        text_from = f"<a href='{self.post_info['message_link']}'>исходный пост</a> в {self.post_info['channel_title']}\nПроцент репостов: <b>{round(forward_rate, 2)}%</b>\nВсего поделились: <b>{forwards} раз</b>"
+        text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
+                                  forward_rate, forwards)
 
         try:
             message = await bot.send_message(user_settings.uid, answer)
             await message.reply(text_from, parse_mode="HTML", disable_web_page_preview=True)
         except Exception as e:
             print(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")
-
 
     async def russian_market_processing(self, user_settings):
         post_text = ''
@@ -104,10 +102,12 @@ class PostProcessor:
                 else:
                     continue
 
-        text_from = f"<a href='{self.post_info['message_link']}'>исходный пост</a> в {self.post_info['channel_title']}\nПроцент репостов: <b>{round(forward_rate, 2)}%</b>\nВсего поделились: <b>{forwards} раз</b>"
+        text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
+                                  forward_rate, forwards)
 
         try:
-            message = await bot.send_message(user_settings.uid, post_text[:4096], parse_mode="HTML", disable_web_page_preview=True)
+            message = await bot.send_message(user_settings.uid, post_text[:4096], parse_mode="HTML",
+                                             disable_web_page_preview=True)
             await message.reply(text_from, parse_mode="HTML", disable_web_page_preview=True)
         except Exception as e:
             print(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")

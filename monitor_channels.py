@@ -22,7 +22,7 @@ async def monitor_channels():
                         async for msg in monitor_bot.get_chat_history(
                                 chat_id=username,
                                 limit=1
-                            ):
+                        ):
                             db.set_last_post_id(channel_id, msg.id)
                             print(f"⏳ Инициализировали last_id = {msg.id} для канала {title}")
                         continue
@@ -60,5 +60,3 @@ async def monitor_channels():
             print(f"❌ Общая ошибка мониторинга: {e}")
 
         await asyncio.sleep(monitor_interval)
-
-

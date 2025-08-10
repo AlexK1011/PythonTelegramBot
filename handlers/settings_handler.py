@@ -10,11 +10,14 @@ import db
 from config import get_settings_text
 
 settings_router = Router()
+
+
 class SettingsState(StatesGroup):
     set_delay = State()
     set_reposts_rate = State()
     enable_ai = State()
     set_system_prompt = State()
+
 
 @settings_router.callback_query(F.data == "settings")
 async def show_settings(callback_query):
@@ -33,7 +36,8 @@ async def show_settings(callback_query):
         delay_text = f"{delay_minutes} мин"
 
     reposts_percent = settings.get("min_forward_rate", 1.0)
-    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) else f"{round(reposts_percent, 2)}%"
+    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) \
+        else f"{round(reposts_percent, 2)}%"
     ai_enabled = settings.get("ai_enabled", 0)
     settings_text = get_settings_text(delay_text, reposts_text, ai_enabled)
 
@@ -44,7 +48,8 @@ async def show_settings(callback_query):
 @settings_router.callback_query(F.data == "delay")
 async def set_delay(callback_query, state: FSMContext):
     await state.set_state(SettingsState.set_delay)
-    await callback_query.message.edit_text("Введите время в часах, которое нужно ждать для сбора статистики по каждому посту")
+    await callback_query.message.edit_text(
+        "Введите время в часах, которое нужно ждать для сбора статистики по каждому посту")
     await callback_query.answer()
 
 
@@ -93,7 +98,6 @@ async def save_delay(message, state: FSMContext):
 
 
     elif len(numbers) == 2:
-        # Разделенный ввод: часы и минуты
         if numbers[0][1] and numbers[0][1] != "":
             await message.reply(f"❌ при указании отдельно часов и минут, количество часов не может быть дробным",
                                 reply_markup=kb.Keyboard)
@@ -126,7 +130,8 @@ async def save_delay(message, state: FSMContext):
         elif minutes == 0:
             await message.reply(f"✅ Время задержки изменено на {hours} часов!", reply_markup=kb.Keyboard)
         else:
-            await message.reply(f"✅ Время задержки изменено на {hours} часов, {minutes} минут!", reply_markup=kb.Keyboard)
+            await message.reply(f"✅ Время задержки изменено на {hours} часов, {minutes} минут!",
+                                reply_markup=kb.Keyboard)
 
         await state.clear()
 
@@ -149,6 +154,7 @@ async def save_reposts_rate(message, state: FSMContext):
             return float(val)
         except (ValueError, TypeError):
             return 0
+
     user_id = message.from_user.id
     text = message.text.strip()
     pattern = r'(\d+(?:[.,]\d*)?)%?'
@@ -218,9 +224,3 @@ async def save_system_prompt(message, state: FSMContext):
     db.set_settings(user_id, "system_prompt", text)
     await message.reply("✅ Промпт сохранен!", reply_markup=kb.Keyboard)
     await state.clear()
-
-
-
-
-
-

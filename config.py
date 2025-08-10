@@ -54,7 +54,8 @@ system_prompt_for_russian_market = """### Роль
 ||%HEADER%||[Заголовок]||%HEADER%||
 [Основная часть поста]"""
 
-def get_settings_text(delay_text, reposts_text,ai_enabled):
+
+def get_settings_text(delay_text, reposts_text, ai_enabled):
     return f"""⚙️ Настройки
 
 1. установить <b>Задержку</b> - время ожидания перед анализом статистики поста. Бот будет ждать указанное время, а затем проверять процент репостов. Это нужно для сбора полной статистики поста.
@@ -69,6 +70,12 @@ def get_settings_text(delay_text, reposts_text,ai_enabled):
 • Задержка: <b>{delay_text}</b>
 • Минимальный процент репостов: <b>{reposts_text}</b>
 • ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
+
+
+def get_text_from(message_link, channel_title, forward_rate, forwards):
+    return (f"<a href='{message_link}'>исходный пост</a> в {channel_title}\n"
+            f"Процент репостов: <b>{round(forward_rate, 2)}%</b>\nВсего поделились: <b>{forwards} раз</b>")
+
 
 rate_limit = 10
 time_window = 10

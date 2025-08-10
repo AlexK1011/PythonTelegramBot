@@ -10,9 +10,11 @@ import db
 
 channel_router = Router()
 
+
 class ChannelState(StatesGroup):
     add_channel = State()
     delete_channel = State()
+
 
 @channel_router.message(lambda m: m.forward_from_chat and m.forward_from_chat.type == 'channel')
 async def add_channel(message, state: FSMContext):
@@ -45,7 +47,7 @@ async def show_channels(callback_query):
     if not channels:
         text = "Список каналов пуст"
     else:
-        channel_lines = [f"{i+1}. {title}" for i, (_, title) in enumerate(channels)]
+        channel_lines = [f"{i + 1}. {title}" for i, (_, title) in enumerate(channels)]
         text = "Сохраненные каналы:\n" + "\n".join(channel_lines)
     await callback_query.answer()
     await callback_query.message.edit_text(text, reply_markup=kb.Keyboard)
@@ -58,11 +60,12 @@ async def start_deleting_channel(callback_query, state: FSMContext):
     if not channels:
         text = "Список каналов пуст"
     else:
-        channel_lines = [f"{i+1}. {title}" for i, (_, title) in enumerate(channels)]
+        channel_lines = [f"{i + 1}. {title}" for i, (_, title) in enumerate(channels)]
         text = "Введите номер канала который нужно удалить:\n" + "\n".join(channel_lines)
         await state.set_state(ChannelState.delete_channel)
     await callback_query.message.edit_text(text, reply_markup=kb.cancel)
     await callback_query.answer()
+
 
 @channel_router.message(ChannelState.delete_channel)
 async def delete_channel(message, state: FSMContext):
@@ -80,16 +83,29 @@ async def delete_channel(message, state: FSMContext):
             db.delete_channel(user_id, channel_id)
             deleted += 1
             valid.append(title)
-            # await message.reply(f"✅ Канал '{title}' удалён!", reply_markup=kb.Keyboard)
+
         else:
             invalid.append(number)
     if deleted > 0:
+        invalid_message = (
+            f"\nОднако, не удалось удалить каналы с номерами: {', '.join(map(str, invalid))}"
+            if invalid
+            else ""
+        )
+
         if deleted == 1:
-            await message.reply(f"✅ канал '{valid[0]}' удалён!{"\n Однако, не удалось удалить каналы с номерами: " + ", ".join(str(num) for num in invalid)  if len(invalid) > 0 else ""}", reply_markup=kb.Keyboard)
+            await message.reply(
+                f"✅ канал {valid[0]} удалён!{invalid_message}",
+                reply_markup=kb.Keyboard)
         elif deleted == 2:
-            await message.reply(f"✅ каналы '{valid[0]}' и '{valid[1]}' удалены!{"\n Однако, не удалось удалить каналы с номерами: " + ", ".join(str(num) for num in invalid)  if len(invalid) > 0 else ""}", reply_markup=kb.Keyboard)
+            await message.reply(
+                f"✅ каналы {valid[0]} и {valid[1]} удалены!{invalid_message}",
+                reply_markup=kb.Keyboard)
         else:
-            await message.reply(f"✅ {deleted} каналов удалены!{"\n Однако, не удалось удалить каналы с номерами: " + ", ".join(str(num) for num in invalid)  if len(invalid) > 0 else ""}", reply_markup=kb.Keyboard)
+            await message.reply(
+                f"✅ {deleted} каналов удалены!{invalid_message}",
+                reply_markup=kb.Keyboard)
     else:
-        await message.reply(f"❌ Не удалось удалить эти каналы. Проверьте номера и повторите попытку.", reply_markup=kb.Keyboard)
+        await message.reply(f"❌ Не удалось удалить эти каналы. Проверьте номера и повторите попытку.",
+                            reply_markup=kb.Keyboard)
     await state.clear()

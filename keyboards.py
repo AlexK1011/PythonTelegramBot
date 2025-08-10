@@ -5,7 +5,6 @@ from aiogram.types import (
     KeyboardButton
 )
 
-# Главное меню (инлайн-клавиатура)
 Keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text="Удалить канал", callback_data="delete_channel")
@@ -28,7 +27,6 @@ settings = InlineKeyboardMarkup(inline_keyboard=[
     ]
 ])
 
-# Клавиатура подтверждения добавления канала
 add_or_not = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text="Да", callback_data="confirm_add_channel"),

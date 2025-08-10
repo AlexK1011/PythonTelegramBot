@@ -1,7 +1,5 @@
 import sqlite3
 
-
-
 DB_PATH = "channels.db"
 
 
@@ -9,7 +7,6 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Существующая таблица каналов
     c.execute('''
               CREATE TABLE IF NOT EXISTS channels
               (
@@ -22,7 +19,6 @@ def init_db():
               )
               ''')
 
-    # Новая таблица для отслеживания последних постов
     c.execute('''
               CREATE TABLE IF NOT EXISTS last_posts
               (
@@ -35,15 +31,14 @@ def init_db():
     c.execute('''
               CREATE TABLE IF NOT EXISTS settings
               (
-                  user_id INTEGER PRIMARY KEY,
-                  delay   INTEGER DEFAULT 3600,
-                  min_forward_rate REAL DEFAULT 1,
-                  ai_enabled INTEGER DEFAULT 0,
-                  system_prompt TEXT DEFAULT NULL
-                  
+                  user_id          INTEGER PRIMARY KEY,
+                  delay            INTEGER DEFAULT 3600,
+                  min_forward_rate REAL    DEFAULT 1,
+                  ai_enabled       INTEGER DEFAULT 0,
+                  system_prompt    TEXT    DEFAULT NULL
+
               )
               ''')
-
 
     conn.commit()
     conn.close()
@@ -57,7 +52,6 @@ def add_channel(user_id, channel_id, title, username):
         (channel_id, user_id, title, username)
     )
 
-    # Создаем запись в last_posts (если её еще нет)
     c.execute('''
               INSERT OR IGNORE INTO last_posts (channel_id, last_message_id, last_check_time)
               VALUES (?, NULL, CURRENT_TIMESTAMP)
@@ -65,6 +59,7 @@ def add_channel(user_id, channel_id, title, username):
 
     conn.commit()
     conn.close()
+
 
 def get_channels(user_id):
     conn = sqlite3.connect(DB_PATH)
@@ -77,6 +72,7 @@ def get_channels(user_id):
     conn.close()
     return channels
 
+
 def channel_exists(user_id, channel_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -88,12 +84,14 @@ def channel_exists(user_id, channel_id):
     conn.close()
     return exists
 
+
 def clear_channels(user_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM channels WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
+
 
 def delete_channel(user_id, channel_id):
     conn = sqlite3.connect(DB_PATH)
@@ -104,12 +102,13 @@ def delete_channel(user_id, channel_id):
     )
 
     c.execute('''
-        DELETE FROM last_posts 
-        WHERE channel_id = ? 
-        AND NOT EXISTS (
-            SELECT 1 FROM channels WHERE id = ?
-        )
-    ''', (channel_id, channel_id))
+              DELETE
+              FROM last_posts
+              WHERE channel_id = ?
+                AND NOT EXISTS (SELECT 1
+                                FROM channels
+                                WHERE id = ?)
+              ''', (channel_id, channel_id))
     conn.commit()
     conn.close()
 
@@ -117,12 +116,12 @@ def delete_channel(user_id, channel_id):
 def get_unique_channels():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # @lang sqlite
     c.execute("SELECT DISTINCT id, title, username FROM channels ORDER BY id")
 
     channels = c.fetchall()
     conn.close()
     return channels
+
 
 def get_users_for_channel(channel_id):
     """Получить всех пользователей, которые подписаны на конкретный канал"""
@@ -132,6 +131,7 @@ def get_users_for_channel(channel_id):
     users = [row[0] for row in c.fetchall()]
     conn.close()
     return users
+
 
 def get_last_post_id(channel_id):
     """Получить ID последнего обработанного поста для канала"""
@@ -144,6 +144,7 @@ def get_last_post_id(channel_id):
     result = c.fetchone()
     conn.close()
     return result[0] if result else None
+
 
 def set_last_post_id(channel_id, message_id):
     """Сохранить ID последнего обработанного поста для канала"""
@@ -164,7 +165,6 @@ def set_settings(user_id: int, column: str, value):
     exists = c.fetchone()
 
     if exists:
-        # Обновляем нужную колонку
         c.execute(f"UPDATE settings SET {column} = ? WHERE user_id = ?", (value, user_id))
     else:
         c.execute(f"INSERT INTO settings (user_id, {column}) VALUES (?, ?)", (user_id, value))
