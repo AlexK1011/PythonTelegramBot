@@ -7,6 +7,7 @@ from aiogram.fsm.state import StatesGroup, State
 import keyboards as kb
 
 import db
+from config import max_channels
 
 channel_router = Router()
 
@@ -24,14 +25,14 @@ async def add_channel(message, state: FSMContext):
     channel_id = message.forward_from_chat.id
     user_channels = db.get_channels(user_id)
 
-    if len(user_channels) >= 50:
+    if len(user_channels) >= max_channels:
         await message.reply(f"❌ Превышено максимальное количество каналов (50)", reply_markup=kb.Keyboard)
         await state.clear()
         return
 
     if username is not None:
-        if not db.channel_exists(user_id, channel_id):
-            db.add_channel(user_id, channel_id, title, username)
+        if not db.channel_exists(user_id, username):
+            db.add_channel(user_id, title, username)
             await message.reply(f"Канал {title} добавлен!", reply_markup=kb.Keyboard)
         else:
             await message.reply(f"Канал {title} уже добавлен!", reply_markup=kb.Keyboard)

@@ -82,3 +82,4 @@ time_window = 10
 max_tokens = 33000
 max_retries = 5
 base_delay = 1
+max_channels = 40
