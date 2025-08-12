@@ -12,10 +12,10 @@ async def monitor_channels():
             unique_channels = db.get_unique_channels()
             print(f"📡 Проверяем {len(unique_channels)} каналов...")
 
-            for title, username in unique_channels:
+            for channel_id, title, username in unique_channels:
                 await asyncio.sleep(delay_for_channel)
                 try:
-                    last_id = db.get_last_post_id(username)
+                    last_id = db.get_last_post_id(channel_id)
                     print(f"🔍 Канал {title} ({username}), последний ID = {last_id}")
 
                     if last_id is None:
@@ -23,7 +23,7 @@ async def monitor_channels():
                                 chat_id=username,
                                 limit=1
                         ):
-                            db.set_last_post_id(username, msg.id)
+                            db.set_last_post_id(channel_id, msg.id)
                             print(f"⏳ Инициализировали last_id = {msg.id} для канала {title}")
                         continue
 
@@ -37,9 +37,10 @@ async def monitor_channels():
 
                     for msg in reversed(new_msgs):
                         post_info = {
-                            "channel_id": username,
+                            "channel_id": channel_id,
+                            "channel_username": username,
                             "post_id": msg.id,
-                            "user_ids": db.get_users_for_channel(username),
+                            "user_ids": db.get_users_for_channel(channel_id),
                             "message_text": msg.text or msg.caption or "Медиа-сообщение",
                             "message_link": f"https://t.me/{username}/{msg.id}",
                             "channel_title": title
@@ -47,7 +48,7 @@ async def monitor_channels():
                         processor = PostProcessor(post_info)
                         await processor.distribute_post()
                         print(f"✅ Новый пост {msg.id} в {title}")
-                        db.set_last_post_id(username, msg.id)
+                        db.set_last_post_id(channel_id, msg.id)
 
                 except FloodWait as e:
                     print(f"FloodWait: жду {e.value} секунд")

@@ -25,7 +25,8 @@ def init_db():
         c.execute('''
                   CREATE TABLE IF NOT EXISTS channels
                   (
-                      username TEXT PRIMARY KEY,
+                      id       INTEGER PRIMARY KEY,
+                      username TEXT NOT NULL UNIQUE,
                       title    TEXT NOT NULL
                   )
                   ''')
@@ -33,22 +34,22 @@ def init_db():
         c.execute('''
                   CREATE TABLE IF NOT EXISTS subscriptions
                   (
-                      user_id          INTEGER,
-                      channel_username TEXT,
-                      added_at         TEXT DEFAULT CURRENT_TIMESTAMP,
-                      PRIMARY KEY (user_id, channel_username),
+                      user_id    INTEGER,
+                      channel_id INTEGER,
+                      added_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+                      PRIMARY KEY (user_id, channel_id),
                       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                      FOREIGN KEY (channel_username) REFERENCES channels (username) ON DELETE CASCADE
+                      FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
                   )
                   ''')
 
         c.execute('''
                   CREATE TABLE IF NOT EXISTS last_posts
                   (
-                      channel_username TEXT PRIMARY KEY,
-                      last_message_id  INTEGER,
-                      last_check_time  TEXT DEFAULT CURRENT_TIMESTAMP,
-                      FOREIGN KEY (channel_username) REFERENCES channels (username) ON DELETE CASCADE
+                      channel_id      INTEGER PRIMARY KEY,
+                      last_message_id INTEGER,
+                      last_check_time TEXT DEFAULT CURRENT_TIMESTAMP,
+                      FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
                   )
                   ''')
 
@@ -74,28 +75,28 @@ def ensure_user_exists(conn, user_id):
     )
 
 
-def add_channel(user_id, title, username):
+def add_channel(user_id, channel_id, title, username):
     with closing(get_connection()) as conn:
         ensure_user_exists(conn, user_id)
         c = conn.cursor()
 
         c.execute(
-            "INSERT OR IGNORE INTO channels (username, title) VALUES (?, ?)",
-            (username, title)
+            "INSERT OR IGNORE INTO channels (id, username, title) VALUES (?, ?, ?)",
+            (channel_id, username, title)
         )
 
         c.execute(
             """INSERT OR IGNORE INTO subscriptions
-                   (user_id, channel_username)
+                   (user_id, channel_id)
                VALUES (?, ?)""",
-            (user_id, username)
+            (user_id, channel_id)
         )
 
         c.execute(
             """INSERT OR IGNORE INTO last_posts
-                   (channel_username, last_message_id)
+                   (channel_id, last_message_id)
                VALUES (?, NULL)""",
-            (username,)
+            (channel_id,)
         )
 
         conn.commit()
@@ -105,9 +106,9 @@ def get_channels(user_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            """SELECT channels.username, channels.title
+            """SELECT channels.id, channels.username, channels.title
                FROM subscriptions
-                        JOIN channels ON subscriptions.channel_username = channels.username
+                        JOIN channels ON subscriptions.channel_id = channels.id
                WHERE subscriptions.user_id = ?
                ORDER BY subscriptions.added_at""",
             (user_id,)
@@ -115,21 +116,21 @@ def get_channels(user_id):
         return c.fetchall()
 
 
-def channel_exists(user_id, username):
+def channel_exists(user_id, channel_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
             """SELECT 1
                FROM subscriptions
                WHERE user_id = ?
-                 AND channel_username = ?""",
-            (user_id, username)
+                 AND channel_id = ?""",
+            (user_id, channel_id)
         )
         exists = c.fetchone() is not None
         return exists
 
 
-def delete_channel(user_id, username):
+def delete_channel(user_id, channel_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
 
@@ -137,27 +138,27 @@ def delete_channel(user_id, username):
             """DELETE
                FROM subscriptions
                WHERE user_id = ?
-                 AND channel_username = ?""",
-            (user_id, username)
+                 AND channel_id = ?""",
+            (user_id, channel_id)
         )
 
         c.execute('''
                   DELETE
                   FROM channels
-                  WHERE username = ?
+                  WHERE id = ?
                     AND NOT EXISTS (SELECT 1
                                     FROM subscriptions
-                                    WHERE channel_username = ?)
-                  ''', (username, username))
+                                    WHERE channel_id = ?)
+                  ''', (channel_id, channel_id))
 
         c.execute('''
                   DELETE
                   FROM last_posts
-                  WHERE channel_username = ?
+                  WHERE channel_id = ?
                     AND NOT EXISTS (SELECT 1
                                     FROM channels
-                                    WHERE username = ?)
-                  ''', (username, username))
+                                    WHERE id = ?)
+                  ''', (channel_id, channel_id))
 
         conn.commit()
 
@@ -166,43 +167,44 @@ def get_unique_channels():
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            "SELECT title, username  FROM channels ORDER BY username"
+            "SELECT DISTINCT id, title, username FROM channels ORDER BY id"
         )
 
         return c.fetchall()
 
 
-def get_users_for_channel(username):
+def get_users_for_channel(channel_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            "SELECT user_id FROM subscriptions WHERE channel_username = ?",
-            (username,)
+            "SELECT user_id FROM subscriptions WHERE channel_id = ?",
+            (channel_id,)
         )
         users = [row[0] for row in c.fetchall()]
         return users
 
 
-def get_last_post_id(username):
+def get_last_post_id(channel_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            "SELECT last_message_id FROM last_posts WHERE channel_username = ?",
-            (username,)
+            "SELECT last_message_id FROM last_posts WHERE channel_id = ?",
+            (channel_id,)
         )
         result = c.fetchone()
         conn.close()
         return result[0] if result else None
 
 
-def set_last_post_id(username, message_id):
+def set_last_post_id(channel_id, message_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            """INSERT OR REPLACE INTO last_posts 
-            (channel_username, last_message_id, last_check_time)
-            VALUES (?, ?, CURRENT_TIMESTAMP)""",
-            (username, message_id)
+            '''INSERT OR
+               REPLACE INTO last_posts
+                   (channel_id, last_message_id, last_check_time)
+               VALUES (?, ?, CURRENT_TIMESTAMP)''',
+            (channel_id, message_id)
         )
         conn.commit()
 
@@ -214,8 +216,9 @@ def set_settings(user_id, setting, value):
         ensure_user_exists(conn, user_id)
 
         c.execute(
-            """INSERT OR REPLACE INTO settings (user_id, setting, value)
-            VALUES (?, ?, ?)""",
+            '''INSERT OR
+               REPLACE INTO settings (user_id, setting, value)
+               VALUES (?, ?, ?)''',
             (user_id, setting, str(value))
         )
         conn.commit()
@@ -257,5 +260,3 @@ def get_settings(user_id):
             result[key] = default_value
 
     return result
-
-
