@@ -1,13 +1,14 @@
 import re
 
 from aiogram import Router, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
 import keyboards as kb
 
 import db
-from config import get_settings_text
+from config import get_settings_text, change_mode_text
 
 settings_router = Router()
 
@@ -17,12 +18,14 @@ class SettingsState(StatesGroup):
     set_reposts_rate = State()
     enable_ai = State()
     set_system_prompt = State()
+    change_mode = State()
 
 
 @settings_router.callback_query(F.data == "settings")
 async def show_settings(callback_query):
     user_id = callback_query.from_user.id
     settings = db.get_settings(user_id)
+    mode = settings.get("mode", 'delayed_check')
 
     delay_seconds = settings.get("delay", 3600)
     delay_hours = delay_seconds // 3600
@@ -39,10 +42,13 @@ async def show_settings(callback_query):
     reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) \
         else f"{round(reposts_percent, 2)}%"
     ai_enabled = settings.get("ai_enabled", 0)
-    settings_text = get_settings_text(delay_text, reposts_text, ai_enabled)
-
-    await callback_query.message.edit_text(settings_text, reply_markup=kb.settings, parse_mode="html")
-    await callback_query.answer()
+    settings_text = get_settings_text(mode, delay_text, reposts_text, ai_enabled)
+    if mode == "delayed_check":
+        await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_delayed_check, parse_mode="html")
+        await callback_query.answer()
+    else:
+        await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_periodic_collection, parse_mode="html")
+        await callback_query.answer()
 
 
 @settings_router.callback_query(F.data == "delay")
@@ -123,7 +129,7 @@ async def save_delay(message, state: FSMContext):
             await state.clear()
             return
 
-        db.set_settings(user_id, "delay", total_seconds)
+        db.set_settings(user_id,"delay", total_seconds)
 
         if hours == 0:
             await message.reply(f"✅ Время задержки изменено на {minutes} минут!", reply_markup=kb.Keyboard)
@@ -156,6 +162,7 @@ async def save_reposts_rate(message, state: FSMContext):
             return 0
 
     user_id = message.from_user.id
+
     text = message.text.strip()
     pattern = r'(\d+(?:[.,]\d*)?)%?'
     number = re.findall(pattern, text)[0]
@@ -224,3 +231,31 @@ async def save_system_prompt(message, state: FSMContext):
     db.set_settings(user_id, "system_prompt", text)
     await message.reply("✅ Промпт сохранен!", reply_markup=kb.Keyboard)
     await state.clear()
+
+
+@settings_router.callback_query(F.data == "change_mode")
+async def change_mode(callback_query, state: FSMContext):
+    await state.set_state(SettingsState.change_mode)
+    await callback_query.message.edit_text(change_mode_text, reply_markup=kb.change_mode, parse_mode="HTML")
+    await callback_query.answer()
+
+
+@settings_router.callback_query(StateFilter(SettingsState.change_mode))
+async def set_mode(callback_query, state: FSMContext):
+    await state.clear()
+    current_mode = db.get_settings(callback_query.from_user.id).get("mode", "delayed_check")
+    mode = callback_query.data
+    if mode == current_mode:
+        await callback_query.message.edit_text("❌ Этот режим уже выбран", reply_markup=kb.Keyboard)
+        return
+    db.set_settings(callback_query.from_user.id, "mode", mode)
+    await callback_query.message.edit_text("✅ Режим изменен!", reply_markup=kb.Keyboard)
+
+
+@settings_router.callback_query(F.data == "interval")
+async def set_interval(callback_query, state: FSMContext):
+    await state.set_state(SettingsState.set_interval)
+    await callback_query.message.edit_text("Введите интервал в минутах", reply_markup=kb.cancel)
+    await callback_query.answer()
+
+

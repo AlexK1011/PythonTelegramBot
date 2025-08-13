@@ -64,6 +64,16 @@ def init_db():
                   )
                   ''')
 
+        # c.execute('''
+        # CREATE TABLE IF NOT EXISTS posts_history(
+        #     id INTEGER PRIMARY KEY,
+        #     channel_id INTEGER,
+        #     post_id INTEGER,
+        #     post_time INTEGER,
+        #     FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
+        # )
+        # ''')
+
         conn.commit()
 
 
@@ -229,7 +239,8 @@ def get_settings(user_id):
         'delay': 3600,
         'min_forward_rate': 1.0,
         'ai_enabled': 0,
-        'system_prompt': ""
+        'system_prompt': "",
+        'mode': "delayed_check",
     }
 
     with closing(get_connection()) as conn:
@@ -260,3 +271,6 @@ def get_settings(user_id):
             result[key] = default_value
 
     return result
+
+
+

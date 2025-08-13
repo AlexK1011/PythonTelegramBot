@@ -17,10 +17,28 @@ Keyboard = InlineKeyboardMarkup(inline_keyboard=[
     ]
 ])
 
-settings = InlineKeyboardMarkup(inline_keyboard=[
+settings_delayed_check = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text="1", callback_data="delay"), InlineKeyboardButton(text="2", callback_data="reposts"),
+        InlineKeyboardButton(text="1", callback_data="delay"),
+        InlineKeyboardButton(text="2", callback_data="reposts"),
         InlineKeyboardButton(text="3", callback_data="enable_ai")
+    ],
+    [
+        InlineKeyboardButton(text="сменить режим", callback_data="change_mode")
+    ],
+    [
+        InlineKeyboardButton(text="назад", callback_data="back_to_main")
+    ]
+])
+
+settings_periodic_collection = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="1", callback_data="interval"),
+        InlineKeyboardButton(text="2", callback_data="number_of_posts"),
+        InlineKeyboardButton(text="3", callback_data="enable_ai"),
+    ],
+    [
+        InlineKeyboardButton(text="сменить режим", callback_data="change_mode")
     ],
     [
         InlineKeyboardButton(text="назад", callback_data="back_to_main")
@@ -35,6 +53,16 @@ add_or_not = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 cancel = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="назад", callback_data="back_to_main")
+    ]
+])
+
+change_mode = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="Отложенная проверка", callback_data="delayed_check"),
+        InlineKeyboardButton(text="Периодический сбор", callback_data="periodic_collection")
+    ],
     [
         InlineKeyboardButton(text="назад", callback_data="back_to_main")
     ]
