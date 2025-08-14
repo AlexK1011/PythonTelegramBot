@@ -9,6 +9,7 @@ import keyboards as kb
 
 import db
 from config import get_settings_text, change_mode_text
+from format_time import format_time
 
 settings_router = Router()
 
@@ -29,24 +30,10 @@ async def show_settings(callback_query):
     settings = db.get_settings(user_id)
     mode = settings.get("mode", 'delayed_check')
 
-    delay_seconds = settings.get("delay", 3600)
-    delay_hours = delay_seconds // 3600
-    delay_minutes = (delay_seconds % 3600) // 60
-
-    if delay_hours > 0 and delay_minutes > 0:
-        delay_text = f"{delay_hours} ч {delay_minutes} мин"
-    elif delay_hours > 0:
-        delay_text = f"{delay_hours} ч"
-    else:
-        delay_text = f"{delay_minutes} мин"
-
-    reposts_percent = settings.get("min_forward_rate", 1.0)
-    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) \
-        else f"{round(reposts_percent, 2)}%"
-    ai_enabled = settings.get("ai_enabled", 0)
-    settings_text = get_settings_text(mode, delay_text, reposts_text, ai_enabled)
+    settings_text = get_settings_text(settings)
     if mode == "delayed_check":
-        await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_delayed_check, parse_mode="html")
+        await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_delayed_check,
+                                               parse_mode="html")
         await callback_query.answer()
     else:
         await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_periodic_collection,
@@ -58,7 +45,7 @@ async def show_settings(callback_query):
 async def set_delay(callback_query, state: FSMContext):
     await state.set_state(SettingsState.set_delay)
     await callback_query.message.edit_text(
-        "Введите время в часах, которое нужно ждать для сбора статистики по каждому посту")
+        "Установите время ожидания\n\nФормат: часы (1.5) или часы:минуты (1:30)")
     await callback_query.answer()
 
 
@@ -68,9 +55,8 @@ def parse_time(text: str) -> dict:
     if not match:
         return {
             "error": True,
-            "reply_text": "❌ Неверный формат времени. Используйте:\n"
-                          "- Часы с дробью: 1.5 или 2,75\n"
-                          "- Часы и минуты: 1:30 или 2:45"
+            "reply_text": "❌ Неверный формат времени\n\nИспользуйте:\n• Часы с дробью: 1.5 или 2,75"
+                          "\n• Часы и минуты: 1:30 или 2:45"
         }
 
     groups = match.groups()
@@ -96,30 +82,6 @@ def parse_time(text: str) -> dict:
     }
 
 
-def format_time(seconds: int) -> str:
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-
-    parts = []
-    if hours > 0:
-        hours_word = "час"
-        if 2 <= hours <= 4:
-            hours_word = "часа"
-        elif hours >= 5:
-            hours_word = "часов"
-        parts.append(f"{hours} {hours_word}")
-
-    if minutes > 0:
-        minutes_word = "минут"
-        if minutes == 1:
-            minutes_word = "минуту"
-        elif 2 <= minutes <= 4:
-            minutes_word = "минуты"
-        parts.append(f"{minutes} {minutes_word}")
-
-    return " ".join(parts)
-
-
 @settings_router.message(SettingsState.set_delay)
 async def save_delay(message, state: FSMContext):
     user_id = message.from_user.id
@@ -140,16 +102,17 @@ async def save_delay(message, state: FSMContext):
         return
 
     if total_seconds > 86400:
-        await message.reply("❌ Задержка не может быть больше 24 часов", reply_markup=kb.Keyboard)
+        await message.reply("❌ Максимальная задержка: 24 часа\n\nУкажите меньшее значение.",
+                            reply_markup=kb.Keyboard)
         await state.clear()
         return
 
     db.set_settings(user_id, "delay", total_seconds)
 
     time_str = format_time(total_seconds)
-    response = f"✅ Время задержки изменено на {time_str}!"
+    response = f"✅ Время задержки изменено на <b>{time_str}</b>"
 
-    await message.reply(response, reply_markup=kb.Keyboard)
+    await message.reply(response, parse_mode="HTML", reply_markup=kb.Keyboard)
     await state.clear()
 
 
@@ -175,7 +138,7 @@ async def save_reposts_rate(message, state: FSMContext):
     number = re.findall(pattern, text)[0]
     number = safe_float(number)
     if number <= 0 or number > 100:
-        await message.reply(f"❌ Пожалуйста, введите число от 1 до 100", reply_markup=kb.Keyboard)
+        await message.reply(f"❌ Введите число от 1 до 100", reply_markup=kb.Keyboard)
         await state.clear()
         return
 
@@ -185,14 +148,15 @@ async def save_reposts_rate(message, state: FSMContext):
         show_number = number
 
     db.set_settings(user_id, "min_forward_rate", number)
-    await message.reply(f"✅ Процент репостов изменен на {show_number}%", reply_markup=kb.Keyboard)
+    await message.reply(f"✅ Процент репостов изменен на <b>{show_number}%</b>",
+                        parse_mode="HTML", reply_markup=kb.Keyboard)
     await state.clear()
 
 
 @settings_router.callback_query(F.data == "enable_ai")
 async def enable_ai(callback_query, state: FSMContext):
     await state.set_state(SettingsState.enable_ai)
-    await callback_query.message.edit_text("Вы хотите использовать обработку постов через ИИ?")
+    await callback_query.message.edit_text("Вы хотите использовать обработку постов через ИИ?\n\nОтветьте: да/нет")
     await callback_query.answer()
 
 
@@ -231,7 +195,7 @@ async def save_system_prompt(message, state: FSMContext):
         await message.reply("❌ Пожалуйста, введите промпт")
         return
     elif len(text) <= 5:
-        await message.reply("❌ промпт должен быть длиннее 5 символов")
+        await message.reply("❌ Промпт должен содержать минимум 5 символов")
         return
 
     db.set_settings(user_id, "ai_enabled", 1)
@@ -253,7 +217,7 @@ async def set_mode(callback_query, state: FSMContext):
     current_mode = db.get_settings(callback_query.from_user.id).get("mode", "delayed_check")
     mode = callback_query.data
     if mode == current_mode:
-        await callback_query.message.edit_text("❌ Этот режим уже выбран", reply_markup=kb.Keyboard)
+        await callback_query.message.edit_text("ℹ️ Этот режим уже активен", reply_markup=kb.Keyboard)
         return
     db.set_settings(callback_query.from_user.id, "mode", mode)
     await callback_query.message.edit_text("✅ Режим изменен!", reply_markup=kb.Keyboard)
@@ -262,7 +226,8 @@ async def set_mode(callback_query, state: FSMContext):
 @settings_router.callback_query(F.data == "interval")
 async def set_interval(callback_query, state: FSMContext):
     await state.set_state(SettingsState.set_interval)
-    await callback_query.message.edit_text("Введите интервал", reply_markup=kb.cancel)
+    await callback_query.message.edit_text("Установите интервал проверки"
+                                           "\n\nФормат: часы (1.5) или часы:минуты (1:30)", reply_markup=kb.cancel)
     await callback_query.answer()
 
 
@@ -299,7 +264,7 @@ async def save_interval(message, state: FSMContext):
 @settings_router.callback_query(F.data == "number_of_posts")
 async def set_number_of_posts(callback_query, state: FSMContext):
     await state.set_state(SettingsState.set_number_of_posts)
-    await callback_query.message.edit_text("Введите количество постов", reply_markup=kb.cancel)
+    await callback_query.message.edit_text("Установите размер топа", reply_markup=kb.cancel)
     await callback_query.answer()
 
 
@@ -312,5 +277,5 @@ async def save_number_of_posts(message, state: FSMContext):
         await state.clear()
         return
     db.set_settings(user_id, "number_of_posts", int(text))
-    await message.reply(f"✅ изменено на {text}!", reply_markup=kb.Keyboard)
+    await message.reply(f"✅ изменено на <b>{text}</b>!", parse_mode="HTML", reply_markup=kb.Keyboard)
     await state.clear()

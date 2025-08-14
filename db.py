@@ -256,8 +256,8 @@ def get_settings(user_id):
 
     result = {}
     for setting, value in settings_data:
-        if setting == 'delay':
-            result[setting] = int(value) if value.isdigit() else default_settings[setting]
+        if setting == 'delay' or setting == 'interval' or setting == 'number_of_posts':
+            result[setting] = int(value)
         elif setting == 'min_forward_rate':
             try:
                 result[setting] = float(value)

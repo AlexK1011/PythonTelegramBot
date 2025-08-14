@@ -10,7 +10,9 @@ base_router = Router()
 @base_router.message(CommandStart())
 async def start(message, state: FSMContext):
     await state.clear()
-    await message.reply("Hello, I'm a bot!", reply_markup=kb.Keyboard)
+    await message.reply("Этот бот анализирует новые посты в ваших Telegram‑каналах и автоматически присылает "
+                        "самые популярные — по доле репостов.\n\nЧтобы добавить канал, перешлите "
+                        "сюда любое сообщение из этого канала.", reply_markup=kb.Keyboard)
 
 
 @base_router.callback_query(F.data == "back_to_main")

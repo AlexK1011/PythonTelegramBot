@@ -26,16 +26,19 @@ async def add_channel(message, state: FSMContext):
     user_channels = db.get_channels(user_id)
 
     if len(user_channels) >= max_channels:
-        await message.reply(f"❌ Превышено максимальное количество каналов (50)", reply_markup=kb.Keyboard)
+        await message.reply(f"❌ Превышено максимальное количество каналов ({max_channels})",
+                            reply_markup=kb.Keyboard)
         await state.clear()
         return
 
     if username is not None:
         if not db.channel_exists(user_id, channel_id):
             db.add_channel(user_id, channel_id, title, username)
-            await message.reply(f"Канал {title} добавлен!", reply_markup=kb.Keyboard)
+            await message.reply(f"✅ Канал <b>{title}</b> добавлен!\nТеперь бот будет отслеживать его посты.",
+                                parse_mode="HTML", reply_markup=kb.Keyboard)
         else:
-            await message.reply(f"Канал {title} уже добавлен!", reply_markup=kb.Keyboard)
+            await message.reply(f"ℹ️ Канал <b>{title}</b> уже в списке мониторинга.",
+                                parse_mode="HTML", reply_markup=kb.Keyboard)
     else:
         await message.reply(f"❌ мониторить можно только публичные каналы", reply_markup=kb.Keyboard)
     await state.clear()
@@ -46,10 +49,10 @@ async def show_channels(callback_query):
     user_id = callback_query.from_user.id
     channels = db.get_channels(user_id)
     if not channels:
-        text = "Список каналов пуст"
+        text = "📋 Список каналов пуст\n\nПерешлите сообщение из канала, чтобы добавить его в мониторинг."
     else:
         channel_lines = [f"{i + 1}. {title}" for i, (_, _, title) in enumerate(channels)]
-        text = "Сохраненные каналы:\n" + "\n".join(channel_lines)
+        text = "📋 Ваши каналы:\n" + "\n".join(channel_lines)
     await callback_query.answer()
     await callback_query.message.edit_text(text, reply_markup=kb.Keyboard)
 
@@ -62,7 +65,7 @@ async def start_deleting_channel(callback_query, state: FSMContext):
         text = "Список каналов пуст"
     else:
         channel_lines = [f"{i + 1}. {title}" for i, (_, _, title) in enumerate(channels)]
-        text = "Введите номер канала который нужно удалить:\n" + "\n".join(channel_lines)
+        text = "🗑️ Выберите канал для удаления:\n\n" + "\n".join(channel_lines) + "\n\nВведите номер канала:"
         await state.set_state(ChannelState.delete_channel)
     await callback_query.message.edit_text(text, reply_markup=kb.cancel)
     await callback_query.answer()
@@ -96,17 +99,17 @@ async def delete_channel(message, state: FSMContext):
 
         if deleted == 1:
             await message.reply(
-                f"✅ канал {valid[0]} удалён!{invalid_message}",
+                f"✅ Канал <b>{valid[0]}</b> удален!{invalid_message}", parse_mode="HTML",
                 reply_markup=kb.Keyboard)
         elif deleted == 2:
             await message.reply(
-                f"✅ каналы {valid[0]} и {valid[1]} удалены!{invalid_message}",
+                f"✅ Каналы <b>{valid[0]}</b> и <b>{valid[1]}</b> удалены!{invalid_message}", parse_mode="HTML",
                 reply_markup=kb.Keyboard)
         else:
             await message.reply(
-                f"✅ {deleted} каналов удалены!{invalid_message}",
+                f"✅ Удалено каналов: <b>{deleted}</b>{invalid_message}", parse_mode="HTML",
                 reply_markup=kb.Keyboard)
     else:
-        await message.reply(f"❌ Не удалось удалить эти каналы. Проверьте номера и повторите попытку.",
+        await message.reply(f"❌ Не удалось удалить каналы\n\nПроверьте номера и попробуйте снова.",
                             reply_markup=kb.Keyboard)
     await state.clear()

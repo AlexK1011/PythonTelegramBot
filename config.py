@@ -1,3 +1,5 @@
+from format_time import format_time
+
 delay_for_channel = 3
 monitor_interval = 60
 default_delay = 3600
@@ -63,7 +65,18 @@ change_mode_text = """Выберите режим работы.
 выберите режим:"""
 
 
-def get_settings_text(mode, delay_text, reposts_text, ai_enabled):
+def get_settings_text(settings):
+
+    mode = settings.get("mode", 'delayed_check')
+    delay_text = format_time(settings.get("delay", 3600))
+    reposts_percent = settings.get("min_forward_rate", 1.0)
+
+    reposts_text = f"{reposts_percent}%" if reposts_percent == int(reposts_percent) \
+        else f"{round(reposts_percent, 2)}%"
+    ai_enabled = int(settings.get("ai_enabled", 0))
+    interval = format_time(settings.get("interval", 3600))
+    number_of_posts = settings.get("number_of_posts", 5)
+
     text_mode1 = """Текущий режим: <b>отложенная проверка</b>
     
 1. установить <b>Задержку</b> - время ожидания перед анализом статистики поста. Бот будет ждать указанное время, а затем проверять процент репостов. Это нужно для сбора полной статистики поста.
@@ -78,6 +91,13 @@ def get_settings_text(mode, delay_text, reposts_text, ai_enabled):
     2. установить <b>Размер топа</b> - количество постов с наивысшим процентом репостов, которые будут отобраны и отправлены вам. Например, топ-5 или топ-10 самых репостнутых публикаций.
 
     3. нужно ли использовать <b>ИИ</b> для обработки отобранных постов."""
+    settings_mode1 = f"""• Задержка: <b>{delay_text}</b>
+• Минимальный процент репостов: <b>{reposts_text}</b>
+• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
+
+    settings_mode2 = f"""• Интервал проверки: <b>{interval}</b>
+• Размер топа: <b>{number_of_posts}</b>
+• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
     return f"""⚙️ Настройки
 
 {text_mode1 if mode == 'delayed_check' else text_mode2}
@@ -85,9 +105,8 @@ def get_settings_text(mode, delay_text, reposts_text, ai_enabled):
 Нажмите на нужную настройку для изменения.
 
 📋 <b>Текущие настройки:</b>
-• Задержка: <b>{delay_text}</b>
-• Минимальный процент репостов: <b>{reposts_text}</b>
-• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
+{settings_mode1 if mode == 'delayed_check' else settings_mode2}
+"""
 
 
 def get_text_from(message_link, channel_title, forward_rate, forwards):
