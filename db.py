@@ -241,6 +241,8 @@ def get_settings(user_id):
         'ai_enabled': 0,
         'system_prompt': "",
         'mode': "delayed_check",
+        'interval': 3600,
+        'number_of_posts': 5,
     }
 
     with closing(get_connection()) as conn:
@@ -271,6 +273,3 @@ def get_settings(user_id):
             result[key] = default_value
 
     return result
-
-
-
