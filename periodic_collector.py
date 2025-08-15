@@ -1,0 +1,117 @@
+import asyncio
+from format_time import format_time
+
+import db
+from bots import monitor_bot, bot
+from config import get_text_from
+from send_to_ai import send_to_deepseek
+
+# Хранилище фоновых задач по пользователям
+_user_tasks = {}
+
+
+def start_periodic_collection_for_user(user_id: int):
+    print(f"запускаем периодическую коллекцию для пользователя {user_id}")
+    task = _user_tasks.get(user_id)
+    if task and not task.done():
+        return
+    _user_tasks[user_id] = asyncio.create_task(_user_periodic_collector(user_id))
+
+
+def stop_periodic_collection_for_user(user_id: int):
+    print(f"останавливаем периодическую коллекцию для пользователя {user_id}")
+    task = _user_tasks.get(user_id)
+    if task and not task.done():
+        task.cancel()
+    _user_tasks.pop(user_id, None)
+
+
+def start_for_all_users():
+    users = db.get_users_by_mode("periodic_collection")
+    for uid in users:
+        start_periodic_collection_for_user(uid)
+
+
+async def _user_periodic_collector(user_id: int):
+    try:
+        while True:
+            settings = db.get_settings(user_id)
+            if settings.get("mode", "delayed_check") != "periodic_collection":
+                break
+
+            interval = int(settings.get("interval", 3600))
+            formated_time = format_time(interval)
+            number_of_posts = int(settings.get("number_of_posts", 5))
+            print("засыпаем")
+            await asyncio.sleep(interval)
+            print("проснулись")
+            new_posts = db.get_posts(user_id, interval)
+            posts = []
+            for post_id, username in new_posts:
+                post = await monitor_bot.get_messages(
+                    chat_id=username,
+                    message_ids=post_id,
+                )
+                views = post.views
+                forwards = post.forwards
+                forward_rate = (forwards / views) * 100
+                post_info = {
+                    "channel_id": username,
+                    "post_id": post_id,
+                    "message_text": post.text or post.caption or "Медиа-сообщение",
+                    "message_link": f"https://t.me/{username}/{post_id}",
+                    "channel_title": post.chat.title,
+                    "views": views,
+                    "forwards": forwards,
+                    "forward_rate": forward_rate,
+                }
+                posts.append(post_info)
+                await asyncio.sleep(0.5)
+
+            sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
+            replies = []
+            for post in sorted_posts:
+                replies.append({
+                    "answer": await process_post(settings, post["message_text"]),
+                    "text_from": get_text_from(post["message_link"], post["channel_title"],
+                                               post["forward_rate"], post["forwards"])
+                })
+            print("начинаем отправку")
+            if len(sorted_posts) < number_of_posts:
+                await bot.send_message(user_id,
+                                       f"за {formated_time} вышло менее {number_of_posts} постов. "
+                                       f"всего было {len(sorted_posts)}")
+                for reply in replies:
+                    message = await bot.send_message(user_id, reply["answer"], disable_notification=True)
+                    await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
+                                        disable_notification=True)
+            else:
+                await bot.send_message(user_id,
+                                       f"За {formated_time} всего было {len(sorted_posts)} постов. "
+                                       f"Вот топ {number_of_posts} из них:")
+                for reply in replies[:number_of_posts]:
+                    message = await bot.send_message(user_id, reply["answer"], disable_notification=True)
+                    await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
+                                        disable_notification=True)
+
+
+
+    except asyncio.CancelledError:
+        # корректное завершение по cancel()
+        pass
+        print("удаляем задачу")
+    except Exception as e:
+        print(f"❌ Periodic: критическая ошибка у пользователя {user_id}: {e}")
+
+
+async def process_post(settings, text):
+    system_prompt = settings.get("system_prompt", "")
+    ai_enabled = int(settings.get("ai_enabled", False))
+    answer = text
+    if ai_enabled:
+        try:
+            answer = await send_to_deepseek(text, system_prompt)
+        except Exception as e:
+            print(f"Ошибка ИИ (default_processing): {e}")
+
+    return answer

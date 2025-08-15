@@ -36,7 +36,7 @@ def init_db():
                   (
                       user_id    INTEGER,
                       channel_id INTEGER,
-                      added_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+                      added_at   INTEGER DEFAULT (strftime('%s', 'now')),
                       PRIMARY KEY (user_id, channel_id),
                       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
                       FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
@@ -48,7 +48,6 @@ def init_db():
                   (
                       channel_id      INTEGER PRIMARY KEY,
                       last_message_id INTEGER,
-                      last_check_time TEXT DEFAULT CURRENT_TIMESTAMP,
                       FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
                   )
                   ''')
@@ -64,15 +63,16 @@ def init_db():
                   )
                   ''')
 
-        # c.execute('''
-        # CREATE TABLE IF NOT EXISTS posts_history(
-        #     id INTEGER PRIMARY KEY,
-        #     channel_id INTEGER,
-        #     post_id INTEGER,
-        #     post_time INTEGER,
-        #     FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
-        # )
-        # ''')
+        c.execute('''
+                  CREATE TABLE IF NOT EXISTS posts_history
+                  (
+                      id         INTEGER PRIMARY KEY,
+                      channel_id INTEGER,
+                      post_id    INTEGER,
+                      post_time  INTEGER DEFAULT (strftime('%s', 'now')),
+                      FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE
+                  )
+                  ''')
 
         conn.commit()
 
@@ -187,7 +187,12 @@ def get_users_for_channel(channel_id):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
-            "SELECT user_id FROM subscriptions WHERE channel_id = ?",
+            """SELECT subscriptions.user_id
+               FROM subscriptions
+                        JOIN settings ON subscriptions.user_id = settings.user_id
+               WHERE channel_id = ?
+                 AND setting = 'mode'
+                 AND value = 'delayed_check'""",
             (channel_id,)
         )
         users = [row[0] for row in c.fetchall()]
@@ -212,8 +217,8 @@ def set_last_post_id(channel_id, message_id):
         c.execute(
             '''INSERT OR
                REPLACE INTO last_posts
-                   (channel_id, last_message_id, last_check_time)
-               VALUES (?, ?, CURRENT_TIMESTAMP)''',
+                   (channel_id, last_message_id)
+               VALUES (?, ?)''',
             (channel_id, message_id)
         )
         conn.commit()
@@ -273,3 +278,46 @@ def get_settings(user_id):
             result[key] = default_value
 
     return result
+
+
+def get_users_by_mode(mode_value: str):
+    with closing(get_connection()) as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT user_id FROM settings WHERE setting = 'mode' AND value = ?",
+            (mode_value,)
+        )
+        return [row[0] for row in c.fetchall()]
+
+
+def set_post(channel_id, post_id):
+    with closing(get_connection()) as conn:
+        c = conn.cursor()
+        c.execute(
+            "DELETE FROM posts_history WHERE post_time < (strftime('%s', 'now') - 259200)"
+        )
+
+        c.execute(
+            "INSERT INTO posts_history (channel_id, post_id) VALUES (?, ?)",
+            (channel_id, post_id)
+        )
+        conn.commit()
+
+
+def get_posts(user_id, interval):
+    with closing(get_connection()) as conn:
+        c = conn.cursor()
+        c.execute(
+            "DELETE FROM posts_history WHERE post_time < (strftime('%s', 'now') - 259200)"
+        )
+
+        c.execute(
+            """SELECT posts_history.post_id, channels.username
+               FROM posts_history
+                        JOIN channels ON channels.id = posts_history.channel_id
+               WHERE posts_history.channel_id IN (SELECT channel_id FROM subscriptions WHERE user_id = ?)
+                 AND posts_history.post_time > (strftime('%s', 'now') - ?)""",
+            (user_id, interval)
+        )
+
+        return c.fetchall()

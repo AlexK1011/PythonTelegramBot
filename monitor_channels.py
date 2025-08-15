@@ -45,6 +45,7 @@ async def monitor_channels():
                             "message_link": f"https://t.me/{username}/{msg.id}",
                             "channel_title": title
                         }
+                        db.set_post(channel_id, msg.id)
                         processor = PostProcessor(post_info)
                         await processor.distribute_post()
                         print(f"✅ Новый пост {msg.id} в {title}")

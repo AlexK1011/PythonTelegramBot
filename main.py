@@ -10,14 +10,15 @@ from monitor_channels import monitor_channels
 from handlers.base_handler import base_router
 from handlers.channel_handler import channel_router
 from handlers.settings_handler import settings_router
+from periodic_collector import start_for_all_users
 
 load_dotenv()
 API_TOKEN = os.getenv("BOT_TOKEN")
 
-db.init_db()
-
 
 async def main():
+    db.init_db()
+
     bot = Bot(token=API_TOKEN)
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
@@ -26,6 +27,7 @@ async def main():
     dp.include_router(settings_router)
 
     await monitor_bot.start()
+    start_for_all_users()
     asyncio.create_task(monitor_channels())
 
     await dp.start_polling(bot)

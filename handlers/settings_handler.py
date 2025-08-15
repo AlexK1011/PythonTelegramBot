@@ -10,6 +10,7 @@ import keyboards as kb
 import db
 from config import get_settings_text, change_mode_text
 from format_time import format_time
+from periodic_collector import start_periodic_collection_for_user, stop_periodic_collection_for_user
 
 settings_router = Router()
 
@@ -101,8 +102,8 @@ async def save_delay(message, state: FSMContext):
         await state.clear()
         return
 
-    if total_seconds > 86400:
-        await message.reply("❌ Максимальная задержка: 24 часа\n\nУкажите меньшее значение.",
+    if total_seconds > 259200:
+        await message.reply("❌ Максимальная задержка: 72 часа\n\nУкажите меньшее значение.",
                             reply_markup=kb.Keyboard)
         await state.clear()
         return
@@ -220,6 +221,11 @@ async def set_mode(callback_query, state: FSMContext):
         await callback_query.message.edit_text("ℹ️ Этот режим уже активен", reply_markup=kb.Keyboard)
         return
     db.set_settings(callback_query.from_user.id, "mode", mode)
+
+    if mode == "periodic_collection":
+        start_periodic_collection_for_user(callback_query.from_user.id)
+    else:
+        stop_periodic_collection_for_user(callback_query.from_user.id)
     await callback_query.message.edit_text("✅ Режим изменен!", reply_markup=kb.Keyboard)
 
 

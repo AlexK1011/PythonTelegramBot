@@ -20,7 +20,7 @@ class PostProcessor:
 
     async def monitor_post(self, delay, uid):
         print(
-            f"⏳ Проверяем пост {self.post_info['post_id']} в канале {self.post_info['channel_id']}, спим {delay} секунд")
+            f"⏳ Проверяем пост {self.post_info['post_id']} в канале {self.post_info['channel_username']}, спим {delay} секунд")
         await asyncio.sleep(delay)
 
         user_settings = UserSettings(uid)
@@ -32,7 +32,7 @@ class PostProcessor:
 
     async def need_to_send(self, min_forward_rate):
         post = await monitor_bot.get_messages(
-            chat_id=self.post_info["channel_id"],
+            chat_id=self.post_info["channel_username"],
             message_ids=self.post_info["post_id"],
         )
         views = post.views
@@ -50,17 +50,21 @@ class PostProcessor:
         print(f"отправим: {is_need_to_send}")
         if not is_need_to_send:
             return
-        answer = ''
+
         text = self.post_info["message_text"]
+        answer = text
         if user_settings.ai_enabled:
             try:
                 answer = await send_to_deepseek(text, user_settings.system_prompt)
             except Exception as e:
                 print(f"Ошибка ИИ (default_processing): {e}")
-                answer = text
 
         text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
                                   forward_rate, forwards)
+
+        mode = db.get_settings(user_settings.uid).get("mode", "delayed_check")
+        if mode == "periodic_collection":
+            return
 
         try:
             message = await bot.send_message(user_settings.uid, answer)
@@ -104,6 +108,10 @@ class PostProcessor:
 
         text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
                                   forward_rate, forwards)
+
+        mode = db.get_settings(user_settings.uid).get("mode", "delayed_check")
+        if mode == "periodic_collection":
+            return
 
         try:
             message = await bot.send_message(user_settings.uid, post_text[:4096], parse_mode="HTML",
