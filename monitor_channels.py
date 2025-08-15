@@ -19,18 +19,19 @@ async def monitor_channels():
                     print(f"🔍 Канал {title} ({username}), последний ID = {last_id}")
 
                     if last_id is None:
-                        async for msg in monitor_bot.get_chat_history(
-                                chat_id=username,
-                                limit=1
-                        ):
-                            db.set_last_post_id(channel_id, msg.id)
-                            print(f"⏳ Инициализировали last_id = {msg.id} для канала {title}")
+                        msgs = await monitor_bot.get_chat_history(
+                            chat_id=username,
+                            limit=1
+                        )
+                        msg = msgs[0]
+                        db.set_last_post_id(channel_id, msg.id)
+                        print(f"⏳ Инициализировали last_id = {msg.id} для канала {title}")
                         continue
 
-                    all_msgs = [msg async for msg in monitor_bot.get_chat_history(
+                    all_msgs = await monitor_bot.get_chat_history(
                         chat_id=username,
                         limit=20
-                    )]
+                    )
                     new_msgs = [m for m in all_msgs if m.id > last_id]
                     if not new_msgs:
                         continue
