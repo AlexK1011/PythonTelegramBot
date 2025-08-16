@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from bots import monitor_bot
 
 import db
+from logger_config import logger
 from monitor_channels import monitor_channels
 from handlers.base_handler import base_router
 from handlers.channel_handler import channel_router
@@ -17,6 +18,7 @@ API_TOKEN = os.getenv("BOT_TOKEN")
 
 
 async def main():
+    logger.info("Запуск Telegram бота")
     db.init_db()
 
     bot = Bot(token=API_TOKEN)

@@ -7,6 +7,7 @@ import httpx
 from dotenv import load_dotenv
 
 from config import rate_limit, max_tokens, max_retries, base_delay, time_window
+from logger_config import logger
 
 load_dotenv()
 
@@ -54,6 +55,7 @@ async def send_to_deepseek(text, system_prompt) -> str:
         for attempt in range(max_retries):
             await _rate_limit()
             try:
+                logger.debug("Отправляем запрос к DeepSeek")
                 resp = await client.post(API_URL, headers=headers, json=payload)
                 last_resp = resp
 
@@ -72,7 +74,7 @@ async def send_to_deepseek(text, system_prompt) -> str:
                         print("=== Рассуждения модели: ===")
                         print(reasoning)
                         print("============================")
-
+                    logger.debug(f"всё хорошо, возвращаем ответ")
                     return answer
 
                 if resp.status_code == 429:

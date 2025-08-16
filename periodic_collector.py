@@ -4,6 +4,7 @@ from format_time import format_time
 import db
 from bots import monitor_bot, bot
 from config import get_text_from
+from logger_config import logger
 from send_to_ai import send_to_deepseek
 
 # Хранилище фоновых задач по пользователям
@@ -11,7 +12,7 @@ _user_tasks = {}
 
 
 def start_periodic_collection_for_user(user_id: int):
-    print(f"запускаем периодическую коллекцию для пользователя {user_id}")
+    logger.info(f"запускаем периодическую коллекцию для пользователя {user_id}")
     task = _user_tasks.get(user_id)
     if task and not task.done():
         return
@@ -19,7 +20,7 @@ def start_periodic_collection_for_user(user_id: int):
 
 
 def stop_periodic_collection_for_user(user_id: int):
-    print(f"останавливаем периодическую коллекцию для пользователя {user_id}")
+    logger.info(f"останавливаем периодическую коллекцию для пользователя {user_id}")
     task = _user_tasks.get(user_id)
     if task and not task.done():
         task.cancel()
@@ -42,9 +43,9 @@ async def _user_periodic_collector(user_id: int):
             interval = int(settings.get("interval", 3600))
             formated_time = format_time(interval)
             number_of_posts = int(settings.get("number_of_posts", 5))
-            print("засыпаем")
+            logger.debug("засыпаем. пользователь %s", user_id)
             await asyncio.sleep(interval)
-            print("проснулись")
+            logger.debug("проснулись. пользователь %s", user_id)
             new_posts = db.get_posts(user_id, interval)
             posts = []
             for post_id, username in new_posts:
@@ -66,17 +67,16 @@ async def _user_periodic_collector(user_id: int):
                     "forward_rate": forward_rate,
                 }
                 posts.append(post_info)
-                await asyncio.sleep(0.5)
 
             sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
             replies = []
-            for post in sorted_posts:
+            for post in sorted_posts[:number_of_posts]:
                 replies.append({
                     "answer": await process_post(settings, post["message_text"]),
                     "text_from": get_text_from(post["message_link"], post["channel_title"],
                                                post["forward_rate"], post["forwards"])
                 })
-            print("начинаем отправку")
+            logger.info("начинаем отправку %d постов пользователю %s", number_of_posts, user_id)
             if len(sorted_posts) < number_of_posts:
                 await bot.send_message(user_id,
                                        f"за {formated_time} вышло менее {number_of_posts} постов. "
@@ -89,7 +89,7 @@ async def _user_periodic_collector(user_id: int):
                 await bot.send_message(user_id,
                                        f"За {formated_time} всего было {len(sorted_posts)} постов. "
                                        f"Вот топ {number_of_posts} из них:")
-                for reply in replies[:number_of_posts]:
+                for reply in replies:
                     message = await bot.send_message(user_id, reply["answer"], disable_notification=True)
                     await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
                                         disable_notification=True)
@@ -99,9 +99,9 @@ async def _user_periodic_collector(user_id: int):
     except asyncio.CancelledError:
         # корректное завершение по cancel()
         pass
-        print("удаляем задачу")
+        logger.debug("удаляем задачу")
     except Exception as e:
-        print(f"❌ Periodic: критическая ошибка у пользователя {user_id}: {e}")
+        logger.error(f"Periodic: критическая ошибка у пользователя {user_id}: {e}")
 
 
 async def process_post(settings, text):
@@ -112,6 +112,6 @@ async def process_post(settings, text):
         try:
             answer = await send_to_deepseek(text, system_prompt)
         except Exception as e:
-            print(f"Ошибка ИИ (default_processing): {e}")
+            logger.error(f"Ошибка ИИ: {e}")
 
     return answer
