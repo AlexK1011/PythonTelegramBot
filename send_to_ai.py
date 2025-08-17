@@ -62,7 +62,7 @@ async def send_to_deepseek(text, system_prompt) -> str:
                 rl_rem = resp.headers.get("X-RateLimit-Remaining")
                 rl_min_rem = resp.headers.get("X-RateLimit-Remaining-Minute")
                 if rl_rem or rl_min_rem:
-                    print(f"RateLimit remaining: total={rl_rem}, per_min={rl_min_rem}")
+                    logger.warning(f"Достигнут лимит (RateLimit=0).")
 
                 if resp.status_code == 200:
                     data = resp.json()
@@ -109,3 +109,18 @@ async def get_openrouter_key_info():
         f"{API_KEY}"})
         r.raise_for_status()
         return r.json()
+
+async def test_openrouter_limit():
+    prompt = "Hello, how are you?"
+    tasks = []
+    for i in range(15):
+        task = asyncio.create_task(send_to_deepseek(prompt, "you are a helpful assistant"))
+        tasks.append(task)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for result in results:
+        if isinstance(result, Exception):
+            print(result)
+    return results
+
+if __name__ == "__main__":
+    asyncio.run(test_openrouter_limit())

@@ -69,13 +69,7 @@ async def _user_periodic_collector(user_id: int):
                 posts.append(post_info)
 
             sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
-            replies = []
-            for post in sorted_posts[:number_of_posts]:
-                replies.append({
-                    "answer": await process_post(settings, post["message_text"]),
-                    "text_from": get_text_from(post["message_link"], post["channel_title"],
-                                               post["forward_rate"], post["forwards"])
-                })
+            replies = await process_posts_concurrently(settings, sorted_posts[:number_of_posts])
             logger.info("начинаем отправку %d постов пользователю %s", number_of_posts, user_id)
             if len(sorted_posts) < number_of_posts:
                 await bot.send_message(user_id,
@@ -102,6 +96,55 @@ async def _user_periodic_collector(user_id: int):
         logger.debug("удаляем задачу")
     except Exception as e:
         logger.error(f"Periodic: критическая ошибка у пользователя {user_id}: {e}")
+
+
+async def process_posts_concurrently(settings, posts):
+    """
+    Параллельно обрабатывает посты через ИИ
+    """
+    if not posts:
+        return []
+
+    # Создаем задачи для параллельной обработки
+    tasks = []
+    for post in posts:
+        task = asyncio.create_task(process_single_post(settings, post))
+        tasks.append(task)
+
+    # Ждем завершения всех задач
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Фильтруем результаты, исключая исключения
+    replies = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.error(f"Ошибка при обработке поста {posts[i]['post_id']}: {result}")
+            # В случае ошибки используем оригинальный текст
+            replies.append({
+                "answer": posts[i]["message_text"],
+                "text_from": get_text_from(posts[i]["message_link"], posts[i]["channel_title"],
+                                           posts[i]["forward_rate"], posts[i]["forwards"])
+            })
+        else:
+            replies.append(result)
+
+    return replies
+
+
+async def process_single_post(settings, post):
+    """
+    Обрабатывает один пост и возвращает готовый ответ
+    """
+    try:
+        answer = await process_post(settings, post["message_text"])
+        return {
+            "answer": answer,
+            "text_from": get_text_from(post["message_link"], post["channel_title"],
+                                       post["forward_rate"], post["forwards"])
+        }
+    except Exception as e:
+        logger.error(f"Ошибка при обработке поста {post['post_id']}: {e}")
+        raise e
 
 
 async def process_post(settings, text):
