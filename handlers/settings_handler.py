@@ -26,7 +26,8 @@ class SettingsState(StatesGroup):
 
 
 @settings_router.callback_query(F.data == "settings")
-async def show_settings(callback_query):
+async def show_settings(callback_query, state: FSMContext):
+    await state.clear()
     user_id = callback_query.from_user.id
     settings = db.get_settings(user_id)
     mode = settings.get("mode", 'delayed_check')
@@ -157,35 +158,55 @@ async def save_reposts_rate(message, state: FSMContext):
 @settings_router.callback_query(F.data == "enable_ai")
 async def enable_ai(callback_query, state: FSMContext):
     await state.set_state(SettingsState.enable_ai)
-    await callback_query.message.edit_text("Вы хотите использовать обработку постов через ИИ?\n\nОтветьте: да/нет")
+    await callback_query.message.edit_text("Вы хотите использовать обработку постов через ИИ?",
+                                           reply_markup=kb.ai_yes_no_keyboard)
     await callback_query.answer()
 
 
-@settings_router.message(SettingsState.enable_ai)
-async def ask_system_prompt(message, state: FSMContext):
-    text = message.text.strip()
+@settings_router.callback_query(F.data == "ai_yes")
+async def enable_ai_yes(callback_query, state: FSMContext):
+    user_id = callback_query.from_user.id
+    current_settings = db.get_settings(user_id)
 
-    if text.lower() == "да":
-        answer = True
-    elif text.lower() == "нет":
-        answer = False
-    else:
-        await message.reply("❌ Пожалуйста, введите да или нет", reply_markup=kb.back_to_settings)
-        return
-
-    current_settings = db.get_settings(message.from_user.id)
-    if answer == bool(current_settings["ai_enabled"]):
-        await message.reply("ИИ уже включен" if answer else "ИИ уже выключен", reply_markup=kb.back_to_settings)
-        return
-
-    if answer:
-        await state.set_state(SettingsState.set_system_prompt)
-        await message.reply("Теперь введите промпт, который будет использоваться для обработки постов через ИИ", reply_markup=kb.back_to_settings)
-    else:
-        db.set_settings(message.from_user.id, "ai_enabled", 0)
-        db.set_settings(message.from_user.id, "system_prompt", "")
-        await message.reply("✅ ИИ выключен!", reply_markup=kb.back_to_settings)
+    if current_settings["ai_enabled"]:
+        await callback_query.message.edit_text(
+            "ИИ уже включен",
+            reply_markup=kb.back_to_settings
+        )
         await state.clear()
+        await callback_query.answer()
+        return
+
+    await state.set_state(SettingsState.set_system_prompt)
+    await callback_query.message.edit_text(
+        "Теперь введите промпт, который будет использоваться для обработки постов через ИИ",
+        reply_markup=kb.back_to_settings
+    )
+    await callback_query.answer()
+
+
+@settings_router.callback_query(F.data == "ai_no")
+async def enable_ai_no(callback_query, state: FSMContext):
+    user_id = callback_query.from_user.id
+    current_settings = db.get_settings(user_id)
+
+    if not current_settings["ai_enabled"]:
+        await callback_query.message.edit_text(
+            "ИИ уже выключен",
+            reply_markup=kb.back_to_settings
+        )
+        await state.clear()
+        await callback_query.answer()
+        return
+
+    db.set_settings(user_id, "ai_enabled", 0)
+    db.set_settings(user_id, "system_prompt", "")
+    await callback_query.message.edit_text(
+        "✅ ИИ выключен!",
+        reply_markup=kb.back_to_settings
+    )
+    await state.clear()
+    await callback_query.answer()
 
 
 @settings_router.message(SettingsState.set_system_prompt)
@@ -218,7 +239,7 @@ async def set_mode(callback_query, state: FSMContext):
     current_mode = db.get_settings(callback_query.from_user.id).get("mode", "delayed_check")
     mode = callback_query.data
     if mode == current_mode:
-        await callback_query.message.edit_text("ℹ️ Этот режим уже активен", reply_markup=kb.back_to_settings)
+        await callback_query.message.edit_text("Этот режим уже активен", reply_markup=kb.back_to_settings)
         return
     db.set_settings(callback_query.from_user.id, "mode", mode)
 
@@ -233,7 +254,8 @@ async def set_mode(callback_query, state: FSMContext):
 async def set_interval(callback_query, state: FSMContext):
     await state.set_state(SettingsState.set_interval)
     await callback_query.message.edit_text("Установите интервал проверки"
-                                           "\n\nФормат: часы (1.5) или часы:минуты (1:30)", reply_markup=kb.back_to_settings)
+                                           "\n\nФормат: часы (1.5) или часы:минуты (1:30)",
+                                           reply_markup=kb.back_to_settings)
     await callback_query.answer()
 
 

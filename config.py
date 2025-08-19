@@ -93,11 +93,15 @@ def get_settings_text(settings):
     3. нужно ли использовать <b>ИИ</b> для обработки отобранных постов."""
     settings_mode1 = f"""• Задержка: <b>{delay_text}</b>
 • Минимальный процент репостов: <b>{reposts_text}</b>
-• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
+• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>
+{"• системный промпт: " + settings.get('system_prompt', '') if bool(ai_enabled) else ''}"""
 
     settings_mode2 = f"""• Интервал проверки: <b>{interval}</b>
 • Размер топа: <b>{number_of_posts}</b>
-• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>"""
+• ИИ: <b>{'Вкл.' if bool(ai_enabled) else 'Выкл.'}</b>
+{"• системный промпт: " + settings.get('system_prompt', '') if bool(ai_enabled) else ''}"""
+
+
     return f"""⚙️ Настройки
 
 {text_mode1 if mode == 'delayed_check' else text_mode2}

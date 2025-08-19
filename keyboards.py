@@ -73,3 +73,13 @@ back_to_settings = InlineKeyboardMarkup(inline_keyboard=[
         InlineKeyboardButton(text="назад", callback_data="settings")
     ]
 ])
+
+ai_yes_no_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="Да", callback_data="ai_yes"),
+        InlineKeyboardButton(text="Нет", callback_data="ai_no")
+    ],
+    [
+        InlineKeyboardButton(text="назад", callback_data="settings")
+    ]
+])
