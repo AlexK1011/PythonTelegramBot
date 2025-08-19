@@ -1,126 +1,130 @@
 import os
-import time
-import random
 import asyncio
-import collections
 import httpx
 from dotenv import load_dotenv
-
-from config import rate_limit, max_tokens, max_retries, base_delay, time_window
 from logger_config import logger
 
 load_dotenv()
 
-API_URL = os.getenv("OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions")
-API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-_call_times = collections.deque()
-_rate_lock = asyncio.Lock()
-
-
-async def _rate_limit():
-    async with _rate_lock:
-        now = time.monotonic()
-        while _call_times and now - _call_times[0] > time_window:
-            _call_times.popleft()
-
-        if len(_call_times) >= rate_limit:
-            sleep_for = time_window - (now - _call_times[0]) + 0.01
-            await asyncio.sleep(max(sleep_for, 0))
-
-        _call_times.append(time.monotonic())
+# Настройки Ollama
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")  # Измените на вашу модель
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", 500))  # Перенесено из config
+MAX_RETRIES = 3
+BASE_DELAY = 1.0
 
 
-async def send_to_deepseek(text, system_prompt) -> str:
-    """Отправляет запрос к DeepSeek‑R1‑0528 с бэкоффом, honoring Retry-After, и локальным rate limit."""
-    if not API_KEY:
-        raise RuntimeError("OPENROUTER_API_KEY не задан")
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}",
-    }
-
+async def ask_local_model(text, system_prompt) -> str:
+    """Отправляет запрос к локальной модели Ollama"""
     payload = {
-        "model": "deepseek/deepseek-r1-0528:free",
+        "model": MODEL_NAME,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": str(text)},
         ],
-        "max_tokens": max_tokens,
+        "options": {
+            "num_predict": MAX_TOKENS
+        },
+        "stream": False
     }
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, read=None)) as client:
-        last_resp = None
-        for attempt in range(max_retries):
-            await _rate_limit()
+    async with httpx.AsyncClient(timeout=None) as client:
+        for attempt in range(MAX_RETRIES):
             try:
-                logger.debug("Отправляем запрос к DeepSeek")
-                resp = await client.post(API_URL, headers=headers, json=payload)
-                last_resp = resp
-
-                rl_rem = resp.headers.get("X-RateLimit-Remaining")
-                rl_min_rem = resp.headers.get("X-RateLimit-Remaining-Minute")
-                if rl_rem or rl_min_rem:
-                    logger.warning(f"Достигнут лимит (RateLimit=0).")
-
-                if resp.status_code == 200:
-                    data = resp.json()
-                    msg = data["choices"][0]["message"]
-                    reasoning = msg.get("reasoning_content")
-                    answer = msg.get("content", "")
-
-                    if reasoning:
-                        print("=== Рассуждения модели: ===")
-                        print(reasoning)
-                        print("============================")
-                    logger.debug(f"всё хорошо, возвращаем ответ")
-                    return answer
-
-                if resp.status_code == 429:
-                    retry_after = resp.headers.get("Retry-After")
-                    if retry_after and retry_after.isdigit():
-                        await asyncio.sleep(int(retry_after))
-                    else:
-                        await asyncio.sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
-                    continue
-
-                if 500 <= resp.status_code < 600:
-                    await asyncio.sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
-                    continue
-
+                logger.debug(f"Запрос к локальной модели {MODEL_NAME}")
+                resp = await client.post(OLLAMA_URL, json=payload)
                 resp.raise_for_status()
 
-            except (httpx.TimeoutException, httpx.NetworkError) as e:
-                if attempt == max_retries - 1:
+                data = resp.json()
+                answer = data["message"]["content"]
+                logger.debug("Успешный ответ от модели")
+                return answer
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    logger.error(f"Модель {MODEL_NAME} не найдена")
+                    raise ValueError(f"Модель {MODEL_NAME} недоступна") from e
+
+                logger.warning(f"HTTP ошибка: {str(e)}, попытка {attempt + 1}/{MAX_RETRIES}")
+                await asyncio.sleep(BASE_DELAY * (2 ** attempt))
+
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError) as e:
+                logger.warning(f"Сетевая ошибка: {str(e)}, попытка {attempt + 1}/{MAX_RETRIES}")
+                await asyncio.sleep(BASE_DELAY * (2 ** attempt))
+
+            except Exception as e:
+                logger.error(f"Неожиданная ошибка: {str(e)}")
+                if attempt == MAX_RETRIES - 1:
                     raise
-                await asyncio.sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
+                await asyncio.sleep(BASE_DELAY * (2 ** attempt))
 
-        if last_resp is not None:
-            last_resp.raise_for_status()
-        raise RuntimeError("Не удалось получить ответ от OpenRouter после ретраев.")
+        raise RuntimeError("Не удалось получить ответ после ретраев")
 
 
-async def get_openrouter_key_info():
-    if not API_KEY:
-        raise RuntimeError("OPENROUTER_API_KEY не задан")
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.get("https://openrouter.ai/api/v1/auth/key", headers={"Authorization": f"Bearer "
-        f"{API_KEY}"})
-        r.raise_for_status()
-        return r.json()
+async def test_local_model():
+    """Тестовая функция для проверки работы с локальной моделью"""
+    prompt = "Привет! Как тебя зовут и что ты умеешь?"
+    system_prompt = "Ты полезный AI-ассистент. Отвечай на русском языке."
 
-async def test_openrouter_limit():
-    prompt = "Hello, how are you?"
+    try:
+        start_time = asyncio.get_event_loop().time()
+        response = await ask_local_model(prompt, system_prompt)
+        elapsed = asyncio.get_event_loop().time() - start_time
+
+        print(f"\n{'=' * 40}")
+        print(f"Модель: {MODEL_NAME}")
+        print(f"Время ответа: {elapsed:.2f} сек")
+        print(f"Ответ:\n{response}")
+        print(f"{'=' * 40}\n")
+        return response
+
+    except Exception as e:
+        logger.exception("Ошибка при тестировании модели")
+        return f"Ошибка: {str(e)}"
+
+
+def check_ollama_connection():
+    """Проверяет доступность Ollama сервера"""
+    try:
+        response = httpx.get("http://localhost:11434", timeout=5.0)
+        if response.status_code == 200:
+            return True, "✅ Ollama сервер доступен"
+        return False, f"⚠️ Ollama сервер недоступен (код: {response.status_code})"
+    except Exception as e:
+        return False, f"❌ Ошибка подключения: {str(e)}"
+
+
+async def test():
+    prompt = "привет, как у тебя дела?"
+    system_prompt = "Ты полезный AI-ассистент. Отвечай на русском языке."
     tasks = []
-    for i in range(15):
-        task = asyncio.create_task(send_to_deepseek(prompt, "you are a helpful assistant"))
+    for i in range(5):
+        task = asyncio.create_task(ask_local_model(prompt, system_prompt))
         tasks.append(task)
+
+    # Ждем завершения всех задач
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for result in results:
-        if isinstance(result, Exception):
-            print(result)
-    return results
+        print(result)
+        print("=" * 40)
 
 if __name__ == "__main__":
-    asyncio.run(test_openrouter_limit())
+    # Проверка подключения
+    # status, message = check_ollama_connection()
+    # print(message)
+    #
+    # if "доступен" in message:
+    #     # Получение информации о доступных моделях
+    #     try:
+    #         models = httpx.get("http://localhost:11434/api/tags").json().get("models", [])
+    #         print("\nДоступные модели:")
+    #         for model in models:
+    #             print(f"  - {model['name']} (размер: {model.get('size', 'N/A')})")
+    #     except Exception:
+    #         print("Не удалось получить список моделей")
+    #
+    #     # Запуск теста
+    #     asyncio.run(test_local_model())
+
+
+    asyncio.run(test())

@@ -5,7 +5,7 @@ import db
 from UserSettings import UserSettings
 from bots import monitor_bot, bot
 from logger_config import logger
-from send_to_ai import send_to_deepseek
+from send_to_ai import ask_local_model
 from config import default_delay, system_prompt_for_russian_market, get_text_from
 
 
@@ -54,7 +54,7 @@ class PostProcessor:
         answer = text
         if user_settings.ai_enabled:
             try:
-                answer = await send_to_deepseek(text, user_settings.system_prompt)
+                answer = await ask_local_model(text, user_settings.system_prompt)
             except Exception as e:
                 logger.error(f"Ошибка ИИ (default_processing): {e}")
 
@@ -82,7 +82,7 @@ class PostProcessor:
 
         for i in range(3):
             try:
-                answer = await send_to_deepseek(text, system_prompt_for_russian_market)
+                answer = await ask_local_model(text, system_prompt_for_russian_market)
             except Exception as e:
                 logger.error(f"Ошибка ИИ (russian_market_processing): {e}")
                 answer = text

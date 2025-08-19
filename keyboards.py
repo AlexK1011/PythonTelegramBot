@@ -52,7 +52,7 @@ add_or_not = InlineKeyboardMarkup(inline_keyboard=[
     ]
 ])
 
-cancel = InlineKeyboardMarkup(inline_keyboard=[
+back_to_main = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text="назад", callback_data="back_to_main")
     ]
@@ -65,5 +65,11 @@ change_mode = InlineKeyboardMarkup(inline_keyboard=[
     ],
     [
         InlineKeyboardButton(text="назад", callback_data="back_to_main")
+    ]
+])
+
+back_to_settings = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="назад", callback_data="settings")
     ]
 ])

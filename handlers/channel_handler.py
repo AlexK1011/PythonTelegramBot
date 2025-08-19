@@ -67,7 +67,7 @@ async def start_deleting_channel(callback_query, state: FSMContext):
         channel_lines = [f"{i + 1}. {title}" for i, (_, _, title) in enumerate(channels)]
         text = "🗑️ Выберите канал для удаления:\n\n" + "\n".join(channel_lines) + "\n\nВведите номер канала:"
         await state.set_state(ChannelState.delete_channel)
-    await callback_query.message.edit_text(text, reply_markup=kb.cancel)
+    await callback_query.message.edit_text(text, reply_markup=kb.back_to_main)
     await callback_query.answer()
 
 

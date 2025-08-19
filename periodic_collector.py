@@ -5,7 +5,7 @@ import db
 from bots import monitor_bot, bot
 from config import get_text_from
 from logger_config import logger
-from send_to_ai import send_to_deepseek
+from send_to_ai import ask_local_model
 
 # Хранилище фоновых задач по пользователям
 _user_tasks = {}
@@ -69,6 +69,7 @@ async def _user_periodic_collector(user_id: int):
                 posts.append(post_info)
 
             sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
+            logger.debug("отправляем в ИИ...")
             replies = await process_posts_concurrently(settings, sorted_posts[:number_of_posts])
             logger.info("начинаем отправку %d постов пользователю %s", number_of_posts, user_id)
             if len(sorted_posts) < number_of_posts:
@@ -119,7 +120,6 @@ async def process_posts_concurrently(settings, posts):
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             logger.error(f"Ошибка при обработке поста {posts[i]['post_id']}: {result}")
-            # В случае ошибки используем оригинальный текст
             replies.append({
                 "answer": posts[i]["message_text"],
                 "text_from": get_text_from(posts[i]["message_link"], posts[i]["channel_title"],
@@ -153,7 +153,7 @@ async def process_post(settings, text):
     answer = text
     if ai_enabled:
         try:
-            answer = await send_to_deepseek(text, system_prompt)
+            answer = await ask_local_model(text, system_prompt)
         except Exception as e:
             logger.error(f"Ошибка ИИ: {e}")
 
