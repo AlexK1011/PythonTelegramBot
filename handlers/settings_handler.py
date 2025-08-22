@@ -18,7 +18,6 @@ settings_router = Router()
 class SettingsState(StatesGroup):
     set_delay = State()
     set_reposts_rate = State()
-    enable_ai = State()
     set_system_prompt = State()
     change_mode = State()
     set_interval = State()
@@ -157,10 +156,15 @@ async def save_reposts_rate(message, state: FSMContext):
 
 @settings_router.callback_query(F.data == "enable_ai")
 async def enable_ai(callback_query, state: FSMContext):
-    await state.set_state(SettingsState.enable_ai)
-    await callback_query.message.edit_text("Вы хотите использовать обработку постов через ИИ?",
-                                           reply_markup=kb.ai_yes_no_keyboard)
-    await callback_query.answer()
+    ai_enabled = db.get_settings(callback_query.from_user.id)["ai_enabled"]
+    if ai_enabled:
+        await callback_query.message.edit_text("Вы хотите выключить обработку постов через ИИ?",
+                                               reply_markup=kb.ai_off_keyboard)
+        await callback_query.answer()
+    else:
+        await callback_query.message.edit_text("Вы хотите включить обработку постов через ИИ?",
+                                               reply_markup=kb.ai_on_keyboard)
+        await callback_query.answer()
 
 
 @settings_router.callback_query(F.data == "ai_yes")
@@ -307,3 +311,21 @@ async def save_number_of_posts(message, state: FSMContext):
     db.set_settings(user_id, "number_of_posts", int(text))
     await message.reply(f"✅ изменено на <b>{text}</b>!", parse_mode="HTML", reply_markup=kb.back_to_settings)
     await state.clear()
+
+
+@settings_router.callback_query(F.data == "show_prompt")
+async def show_prompt(callback_query, state: FSMContext):
+    user_id = callback_query.from_user.id
+    prompt = db.get_settings(user_id).get("system_prompt")
+    if prompt is None:
+        await callback_query.message.edit_text("Промпт не установлен", reply_markup=kb.back_to_settings)
+    else:
+        await callback_query.message.edit_text(prompt, disable_web_page_preview=True, reply_markup=kb.change_prompt)
+    await callback_query.answer()
+
+
+@settings_router.callback_query(F.data == "change_prompt")
+async def change_prompt(callback_query, state: FSMContext):
+    await state.set_state(SettingsState.set_system_prompt)
+    await callback_query.message.edit_text("Введите промпт", reply_markup=kb.back_to_settings)
+    await callback_query.answer()

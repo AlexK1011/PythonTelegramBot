@@ -74,10 +74,30 @@ back_to_settings = InlineKeyboardMarkup(inline_keyboard=[
     ]
 ])
 
-ai_yes_no_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+ai_on_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text="Да", callback_data="ai_yes"),
-        InlineKeyboardButton(text="Нет", callback_data="ai_no")
+        InlineKeyboardButton(text="включить", callback_data="ai_yes"),
+    ],
+    [
+        InlineKeyboardButton(text="назад", callback_data="settings")
+    ]
+])
+
+ai_off_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="выключить", callback_data="ai_no"),
+    ],
+    [
+        InlineKeyboardButton(text="показать промпт", callback_data="show_prompt"),
+    ],
+    [
+        InlineKeyboardButton(text="назад", callback_data="settings")
+    ]
+])
+
+change_prompt = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="изменить промпт", callback_data="change_prompt"),
     ],
     [
         InlineKeyboardButton(text="назад", callback_data="settings")

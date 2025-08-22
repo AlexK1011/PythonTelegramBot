@@ -49,36 +49,37 @@ async def _user_periodic_collector(user_id: int):
                 new_posts = db.get_posts(user_id, interval)
                 posts = []
                 for post_id, username in new_posts:
-                    post = await monitor_bot.get_messages(
-                        chat_id=username,
-                        message_ids=post_id,
-                    )
-                    views = int(post.views) if post.views is not None else 0
-                    forwards = int(post.forwards) if post.forwards is not None else 0
-                    forward_rate = (forwards / views) * 100 if views else 0.0
-                    text_html = post.text.html if post.text is not None else None
-                    cap_html = post.caption.html if post.caption is not None else None
-                    message_html = text_html or cap_html or "Медиа-сообщение"
-                    channel_title = (
-                        getattr(getattr(post, "chat", None), "title", None)
-                        or getattr(getattr(post, "sender_chat", None), "title", None)
-                        or getattr(getattr(post, "forward_from_chat", None), "title", None)
-                        or "Неизвестный канал"
-                    )
-                    if channel_title == "Неизвестный канал":
-                        logger.warning("Не удалось определить title канала для %s/%s", username, post_id)
-                    post_info = {
-                        "channel_id": username,
-                        "post_id": post_id,
-                        "html": message_html,
-                        "message_text": post.text or post.caption or "Медиа-сообщение",
-                        "message_link": f"https://t.me/{username}/{post_id}",
-                        "channel_title": post.chat.title,
-                        "views": views,
-                        "forwards": forwards,
-                        "forward_rate": forward_rate,
-                    }
-                    posts.append(post_info)
+                    try:
+                        post = await monitor_bot.get_messages(
+                            chat_id=username,
+                            message_ids=post_id,
+                        )
+                        views = int(post.views) if post.views is not None else 0
+                        forwards = int(post.forwards) if post.forwards is not None else 0
+                        forward_rate = (forwards / views) * 100 if views else 0.0
+                        text_html = post.text.html if post.text is not None else None
+                        cap_html = post.caption.html if post.caption is not None else None
+                        message_html = text_html or cap_html or "Медиа-сообщение"
+                        channel_title = (
+                            getattr(getattr(post, "chat", None), "title", None)
+                            or "Неизвестный канал"
+                        )
+                        if channel_title == "Неизвестный канал":
+                            logger.warning("Не удалось определить title канала для %s/%s", username, post_id)
+                        post_info = {
+                            "channel_id": username,
+                            "post_id": post_id,
+                            "html": message_html,
+                            "message_text": post.text or post.caption or "Медиа-сообщение",
+                            "message_link": f"https://t.me/{username}/{post_id}",
+                            "channel_title": post.chat.title,
+                            "views": views,
+                            "forwards": forwards,
+                            "forward_rate": forward_rate,
+                        }
+                        posts.append(post_info)
+                    except Exception as e:
+                        logger.error(f"Ошибка получения поста {post_id} канала {username}: {e}")
 
                 sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
                 logger.debug("отправляем в ИИ...")
