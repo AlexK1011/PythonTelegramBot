@@ -3,7 +3,7 @@ from format_time import format_time
 
 import db
 from bots import monitor_bot, bot
-from config import get_text_from
+from config import get_text_from, base_system_prompt
 from logger_config import logger
 from send_to_ai import ask_local_model
 
@@ -34,69 +34,88 @@ def start_for_all_users():
 
 
 async def _user_periodic_collector(user_id: int):
-    try:
         while True:
-            settings = db.get_settings(user_id)
-            if settings.get("mode", "delayed_check") != "periodic_collection":
-                break
+            try:
+                settings = db.get_settings(user_id)
+                if settings.get("mode", "delayed_check") != "periodic_collection":
+                    break
 
-            interval = int(settings.get("interval", 3600))
-            formated_time = format_time(interval)
-            number_of_posts = int(settings.get("number_of_posts", 5))
-            logger.debug("засыпаем. пользователь %s", user_id)
-            await asyncio.sleep(interval)
-            logger.debug("проснулись. пользователь %s", user_id)
-            new_posts = db.get_posts(user_id, interval)
-            posts = []
-            for post_id, username in new_posts:
-                post = await monitor_bot.get_messages(
-                    chat_id=username,
-                    message_ids=post_id,
-                )
-                views = post.views
-                forwards = post.forwards
-                forward_rate = (forwards / views) * 100
-                post_info = {
-                    "channel_id": username,
-                    "post_id": post_id,
-                    "message_text": post.text or post.caption or "Медиа-сообщение",
-                    "message_link": f"https://t.me/{username}/{post_id}",
-                    "channel_title": post.chat.title,
-                    "views": views,
-                    "forwards": forwards,
-                    "forward_rate": forward_rate,
-                }
-                posts.append(post_info)
+                interval = int(settings.get("interval", 3600))
+                formated_time = format_time(interval)
+                number_of_posts = int(settings.get("number_of_posts", 5))
+                logger.debug("засыпаем. пользователь %s", user_id)
+                await asyncio.sleep(interval)
+                logger.debug("проснулись. пользователь %s", user_id)
+                new_posts = db.get_posts(user_id, interval)
+                posts = []
+                for post_id, username in new_posts:
+                    post = await monitor_bot.get_messages(
+                        chat_id=username,
+                        message_ids=post_id,
+                    )
+                    views = int(post.views) if post.views is not None else 0
+                    forwards = int(post.forwards) if post.forwards is not None else 0
+                    forward_rate = (forwards / views) * 100 if views else 0.0
+                    text_html = post.text.html if post.text is not None else None
+                    cap_html = post.caption.html if post.caption is not None else None
+                    message_html = text_html or cap_html or "Медиа-сообщение"
+                    channel_title = (
+                        getattr(getattr(post, "chat", None), "title", None)
+                        or getattr(getattr(post, "sender_chat", None), "title", None)
+                        or getattr(getattr(post, "forward_from_chat", None), "title", None)
+                        or "Неизвестный канал"
+                    )
+                    if channel_title == "Неизвестный канал":
+                        logger.warning("Не удалось определить title канала для %s/%s", username, post_id)
+                    post_info = {
+                        "channel_id": username,
+                        "post_id": post_id,
+                        "html": message_html,
+                        "message_text": post.text or post.caption or "Медиа-сообщение",
+                        "message_link": f"https://t.me/{username}/{post_id}",
+                        "channel_title": post.chat.title,
+                        "views": views,
+                        "forwards": forwards,
+                        "forward_rate": forward_rate,
+                    }
+                    posts.append(post_info)
 
-            sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
-            logger.debug("отправляем в ИИ...")
-            replies = await process_posts_concurrently(settings, sorted_posts[:number_of_posts])
-            logger.info("начинаем отправку %d постов пользователю %s", number_of_posts, user_id)
-            if len(sorted_posts) < number_of_posts:
-                await bot.send_message(user_id,
-                                       f"за {formated_time} вышло менее {number_of_posts} постов. "
-                                       f"всего было {len(sorted_posts)}")
-                for reply in replies:
-                    message = await bot.send_message(user_id, reply["answer"], disable_notification=True)
-                    await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
-                                        disable_notification=True)
-            else:
-                await bot.send_message(user_id,
-                                       f"За {formated_time} всего было {len(sorted_posts)} постов. "
-                                       f"Вот топ {number_of_posts} из них:")
-                for reply in replies:
-                    message = await bot.send_message(user_id, reply["answer"], disable_notification=True)
-                    await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
-                                        disable_notification=True)
+                sorted_posts = sorted(posts, key=lambda x: x['forward_rate'], reverse=True)
+                logger.debug("отправляем в ИИ...")
+                replies = await process_posts_concurrently(settings, sorted_posts[:number_of_posts])
+                logger.info("начинаем отправку %d постов пользователю %s", number_of_posts, user_id)
+                if len(sorted_posts) < number_of_posts:
+                    await bot.send_message(user_id,
+                                           f"за {formated_time} вышло менее {number_of_posts} постов. "
+                                           f"всего было {len(sorted_posts)}")
+                    for reply in replies:
+                        try:
+                            message = await bot.send_message(user_id, reply["answer"], parse_mode="HTML",disable_web_page_preview=True, disable_notification=True)
+
+                            await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
+                                                disable_notification=True)
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
+                else:
+                    await bot.send_message(user_id,
+                                           f"За {formated_time} всего было {len(sorted_posts)} постов. "
+                                           f"Вот топ {number_of_posts} из них:")
+                    for reply in replies:
+                        try:
+                            message = await bot.send_message(user_id, reply["answer"], parse_mode="HTML", disable_web_page_preview=True, disable_notification=True)
+                            await message.reply(reply["text_from"], parse_mode="HTML", disable_web_page_preview=True,
+                                                disable_notification=True)
+                        except Exception as e:
+                            logger.error(f"Ошибка отправки сообщения пользователю {user_id}: {e}")
 
 
 
-    except asyncio.CancelledError:
-        # корректное завершение по cancel()
-        pass
-        logger.debug("удаляем задачу")
-    except Exception as e:
-        logger.error(f"Periodic: критическая ошибка у пользователя {user_id}: {e}")
+            except asyncio.CancelledError:
+                pass
+                logger.debug("удаляем задачу")
+            except Exception as e:
+                logger.error(f"Periodic: критическая ошибка у пользователя {user_id}: {e}")
+
 
 
 async def process_posts_concurrently(settings, posts):
@@ -136,7 +155,7 @@ async def process_single_post(settings, post):
     Обрабатывает один пост и возвращает готовый ответ
     """
     try:
-        answer = await process_post(settings, post["message_text"])
+        answer = await process_post(settings, post)
         return {
             "answer": answer,
             "text_from": get_text_from(post["message_link"], post["channel_title"],
@@ -147,13 +166,15 @@ async def process_single_post(settings, post):
         raise e
 
 
-async def process_post(settings, text):
-    system_prompt = settings.get("system_prompt", "")
+async def process_post(settings, post):
+    message_html = post["html"]
+    user_system_prompt = settings.get("system_prompt", "")
+    system_prompt = base_system_prompt + user_system_prompt
     ai_enabled = int(settings.get("ai_enabled", False))
-    answer = text
+    answer = message_html
     if ai_enabled:
         try:
-            answer = await ask_local_model(text, system_prompt)
+            answer = await ask_local_model(message_html, system_prompt)
         except Exception as e:
             logger.error(f"Ошибка ИИ: {e}")
 

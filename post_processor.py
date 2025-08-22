@@ -6,7 +6,7 @@ from UserSettings import UserSettings
 from bots import monitor_bot, bot
 from logger_config import logger
 from send_to_ai import ask_local_model
-from config import default_delay, system_prompt_for_russian_market, get_text_from
+from config import default_delay, system_prompt_for_russian_market, get_text_from, base_system_prompt
 
 
 class PostProcessor:
@@ -50,11 +50,12 @@ class PostProcessor:
         if not is_need_to_send:
             return
 
-        text = self.post_info["message_text"]
-        answer = text
+        message_html = self.post_info["html"]
+        answer = message_html
+        system_prompt = base_system_prompt + user_settings.system_prompt
         if user_settings.ai_enabled:
             try:
-                answer = await ask_local_model(text, user_settings.system_prompt)
+                answer = await ask_local_model(message_html, system_prompt)
             except Exception as e:
                 logger.error(f"Ошибка ИИ (default_processing): {e}")
 
@@ -66,7 +67,7 @@ class PostProcessor:
             return
 
         try:
-            message = await bot.send_message(user_settings.uid, answer)
+            message = await bot.send_message(user_settings.uid, answer, parse_mode="HTML")
             await message.reply(text_from, parse_mode="HTML", disable_web_page_preview=True)
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")

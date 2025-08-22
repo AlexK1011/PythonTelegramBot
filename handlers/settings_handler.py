@@ -35,11 +35,11 @@ async def show_settings(callback_query, state: FSMContext):
     settings_text = get_settings_text(settings)
     if mode == "delayed_check":
         await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_delayed_check,
-                                               parse_mode="html")
+                                               parse_mode="html", disable_web_page_preview=True)
         await callback_query.answer()
     else:
         await callback_query.message.edit_text(settings_text, reply_markup=kb.settings_periodic_collection,
-                                               parse_mode="html")
+                                               parse_mode="html", disable_web_page_preview=True)
         await callback_query.answer()
 
 

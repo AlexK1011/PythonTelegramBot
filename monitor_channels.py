@@ -38,11 +38,15 @@ async def monitor_channels():
                         continue
 
                     for msg in reversed(new_msgs):
+                        text_html = msg.text.html if msg.text is not None else None
+                        cap_html = msg.caption.html if msg.caption is not None else None
+                        message_html = text_html or cap_html or "Медиа-сообщение"
                         post_info = {
                             "channel_id": channel_id,
                             "channel_username": username,
                             "post_id": msg.id,
                             "user_ids": db.get_users_for_channel(channel_id),
+                            "html": message_html,
                             "message_text": msg.text or msg.caption or "Медиа-сообщение",
                             "message_link": f"https://t.me/{username}/{msg.id}",
                             "channel_title": title

@@ -8,8 +8,8 @@ load_dotenv()
 
 # Настройки Ollama
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")  # Измените на вашу модель
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", 500))  # Перенесено из config
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")  # Измените на вашу модель
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", -1))  # Перенесено из config
 MAX_RETRIES = 3
 BASE_DELAY = 1.0
 
@@ -32,12 +32,14 @@ async def ask_local_model(text, system_prompt) -> str:
         for attempt in range(MAX_RETRIES):
             try:
                 logger.debug(f"Запрос к локальной модели {MODEL_NAME}")
+                logger.debug(f"{text} {system_prompt[:20]}...")
                 resp = await client.post(OLLAMA_URL, json=payload)
                 resp.raise_for_status()
 
                 data = resp.json()
                 answer = data["message"]["content"]
                 logger.debug("Успешный ответ от модели")
+                print(answer)
                 return answer
 
             except httpx.HTTPStatusError as e:
