@@ -1,11 +1,11 @@
 import asyncio
-from format_time import format_time
+from utils.format_time import format_time
 
-import db
-from bots import monitor_bot, bot
-from config import get_text_from, base_system_prompt
-from logger_config import logger
-from send_to_ai import ask_local_model
+import core.db as db
+from utils.bots import monitor_bot, bot
+from core.config import get_text_from, base_system_prompt
+from core.logger_config import logger
+from services.send_to_ai import ask_local_model
 
 # Хранилище фоновых задач по пользователям
 _user_tasks = {}

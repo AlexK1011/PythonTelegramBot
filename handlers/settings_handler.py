@@ -5,12 +5,12 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-import keyboards as kb
+from utils import keyboards as kb
 
-import db
-from config import get_settings_text, change_mode_text
-from format_time import format_time
-from periodic_collector import start_periodic_collection_for_user, stop_periodic_collection_for_user
+import core.db as db
+from core.config import get_settings_text, change_mode_text
+from utils.format_time import format_time
+from services.periodic_collector import start_periodic_collection_for_user, stop_periodic_collection_for_user
 
 settings_router = Router()
 

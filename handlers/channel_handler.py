@@ -4,10 +4,10 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 
-import keyboards as kb
+from utils import keyboards as kb
 
-import db
-from config import max_channels
+import core.db as db
+from core.config import max_channels
 
 channel_router = Router()
 

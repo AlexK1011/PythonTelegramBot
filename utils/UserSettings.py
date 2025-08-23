@@ -1,5 +1,5 @@
-import db
-from config import default_delay, default_min_forward_rate
+import core.db as db
+from core.config import default_delay, default_min_forward_rate
 
 
 class UserSettings:

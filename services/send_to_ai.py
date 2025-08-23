@@ -2,7 +2,7 @@ import os
 import asyncio
 import httpx
 from dotenv import load_dotenv
-from logger_config import logger
+from core.logger_config import logger
 
 load_dotenv()
 

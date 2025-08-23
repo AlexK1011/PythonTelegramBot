@@ -1,9 +1,9 @@
 import logging
+import re
 from logging.handlers import TimedRotatingFileHandler
 
 import colorlog
 import os
-from datetime import datetime
 
 
 def setup_logger():
@@ -41,6 +41,10 @@ def setup_logger():
         backupCount=7,
         encoding='utf-8'
     )
+
+    file_handler.suffix = "%Y-%m-%d"
+    file_handler.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(file_formatter)
 

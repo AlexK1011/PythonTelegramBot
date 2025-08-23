@@ -1,4 +1,4 @@
-from format_time import format_time
+from utils.format_time import format_time
 
 delay_for_channel = 3
 monitor_interval = 60

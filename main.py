@@ -1,17 +1,17 @@
 import asyncio
 import os
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
-from bots import monitor_bot
+from utils.bots import monitor_bot
 
-import db
-from logger_config import logger
-from monitor_channels import monitor_channels
+import core.db as db
+from core.logger_config import logger
+from services.monitor_channels import monitor_channels
 from handlers.base_handler import base_router
 from handlers.channel_handler import channel_router
 from handlers.settings_handler import settings_router
-from periodic_collector import start_for_all_users
+from services.periodic_collector import start_for_all_users
 
 load_dotenv()
 API_TOKEN = os.getenv("BOT_TOKEN")

@@ -1,12 +1,12 @@
 import asyncio
 import re
 import html
-import db
-from UserSettings import UserSettings
-from bots import monitor_bot, bot
-from logger_config import logger
-from send_to_ai import ask_local_model
-from config import default_delay, system_prompt_for_russian_market, get_text_from, base_system_prompt
+import core.db as db
+from utils.UserSettings import UserSettings
+from utils.bots import monitor_bot, bot
+from core.logger_config import logger
+from services.send_to_ai import ask_local_model
+from core.config import default_delay, system_prompt_for_russian_market, get_text_from, base_system_prompt
 
 
 class PostProcessor:

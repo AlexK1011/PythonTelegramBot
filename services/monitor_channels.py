@@ -1,10 +1,10 @@
 import asyncio
 from pyrogram.errors import FloodWait
-from config import delay_for_channel, monitor_interval
-import db
-from bots import monitor_bot
-from logger_config import logger
-from post_processor import PostProcessor
+from core.config import delay_for_channel, monitor_interval
+import core.db as db
+from utils.bots import monitor_bot
+from core.logger_config import logger
+from services.post_processor import PostProcessor
 
 
 async def monitor_channels():

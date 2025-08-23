@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 
-import keyboards as kb
+from utils import keyboards as kb
 
 base_router = Router()
 
