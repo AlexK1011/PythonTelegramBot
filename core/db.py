@@ -248,6 +248,7 @@ def get_settings(user_id):
         'mode': "delayed_check",
         'interval': 3600,
         'number_of_posts': 5,
+        'min_post_age': 0,
     }
 
     with closing(get_connection()) as conn:
@@ -261,7 +262,7 @@ def get_settings(user_id):
 
     result = {}
     for setting, value in settings_data:
-        if setting == 'delay' or setting == 'interval' or setting == 'number_of_posts':
+        if setting == 'delay' or setting == 'interval' or setting == 'number_of_posts' or setting == 'min_post_age':
             result[setting] = int(value)
         elif setting == 'min_forward_rate':
             try:

@@ -34,8 +34,9 @@ settings_delayed_check = InlineKeyboardMarkup(inline_keyboard=[
 settings_periodic_collection = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text="1", callback_data="interval"),
-        InlineKeyboardButton(text="2", callback_data="number_of_posts"),
-        InlineKeyboardButton(text="3", callback_data="enable_ai"),
+        InlineKeyboardButton(text="2", callback_data="min_post_age"),
+        InlineKeyboardButton(text="3", callback_data="number_of_posts"),
+        InlineKeyboardButton(text="4", callback_data="enable_ai"),
     ],
     [
         InlineKeyboardButton(text="сменить режим", callback_data="change_mode")

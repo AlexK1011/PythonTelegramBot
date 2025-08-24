@@ -1,4 +1,7 @@
 def format_time(seconds: int) -> str:
+    if seconds == 0:
+        return "0 минут"
+
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
 

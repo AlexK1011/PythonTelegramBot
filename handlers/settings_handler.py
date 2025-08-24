@@ -22,6 +22,7 @@ class SettingsState(StatesGroup):
     change_mode = State()
     set_interval = State()
     set_number_of_posts = State()
+    set_min_post_age = State()
 
 
 @settings_router.callback_query(F.data == "settings")
@@ -335,3 +336,38 @@ async def change_prompt(callback_query, state: FSMContext):
     await state.set_state(SettingsState.set_system_prompt)
     await callback_query.message.edit_text("Введите промпт", reply_markup=kb.back_to_settings)
     await callback_query.answer()
+
+
+@settings_router.callback_query(F.data == "min_post_age")
+async def set_min_post_age(callback_query, state: FSMContext):
+
+    await state.set_state(SettingsState.set_min_post_age)
+    await callback_query.message.edit_text("Установите минимальный возраст поста"
+                                           "\n\nФормат: часы (1.5) или часы:минуты (1:30)",
+                                           reply_markup=kb.back_to_settings)
+    await callback_query.answer()
+
+
+@settings_router.message(SettingsState.set_min_post_age)
+async def save_min_post_age(message, state: FSMContext):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    parsed = parse_time(text)
+
+    if parsed["error"]:
+        await message.reply(parsed["reply_text"], reply_markup=kb.Keyboard)
+        await state.clear()
+        return
+
+    total_seconds = parsed["total_seconds"]
+
+    if total_seconds > 86400:
+        await message.reply("❌ минимальный возраст поста не может быть больше 24 часов", reply_markup=kb.back_to_settings)
+        await state.clear()
+        return
+
+    db.set_settings(user_id, "min_post_age", total_seconds)
+
+    time_str = format_time(total_seconds)
+    await message.reply(f"✅ минимальный возраст поста изменен на {time_str}!", reply_markup=kb.back_to_settings)
+    await state.clear()
