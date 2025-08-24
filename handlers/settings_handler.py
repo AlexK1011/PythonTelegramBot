@@ -8,7 +8,7 @@ from aiogram.fsm.state import StatesGroup, State
 from utils import keyboards as kb
 
 import core.db as db
-from core.config import get_settings_text, change_mode_text
+from core.config import get_settings_text, change_mode_text, max_time
 from utils.format_time import format_time
 from services.periodic_collector import start_periodic_collection_for_user, stop_periodic_collection_for_user
 
@@ -106,13 +106,11 @@ async def save_delay(message, state: FSMContext):
 
     if total_seconds <= 0:
         await message.reply("❌ Задержка не может быть нулевой", reply_markup=kb.back_to_settings)
-        await state.clear()
         return
 
-    if total_seconds > 259200:
+    if total_seconds > max_time:
         await message.reply("❌ Максимальная задержка: 72 часа\n\nУкажите меньшее значение.",
                             reply_markup=kb.back_to_settings)
-        await state.clear()
         return
 
     db.set_settings(user_id, "delay", total_seconds)
@@ -147,7 +145,6 @@ async def save_reposts_rate(message, state: FSMContext):
     number = safe_float(number)
     if number <= 0 or number > 100:
         await message.reply(f"❌ Введите число от 1 до 100", reply_markup=kb.back_to_settings)
-        await state.clear()
         return
 
     try:
@@ -278,19 +275,16 @@ async def save_interval(message, state: FSMContext):
 
     if parsed["error"]:
         await message.reply(parsed["reply_text"], reply_markup=kb.Keyboard)
-        await state.clear()
         return
 
     total_seconds = parsed["total_seconds"]
 
     if total_seconds <= 0:
         await message.reply("❌ Интервал не может быть нулевым", reply_markup=kb.back_to_settings)
-        await state.clear()
         return
 
-    if total_seconds > 86400:
-        await message.reply("❌ Интервал не может быть больше 24 часов", reply_markup=kb.back_to_settings)
-        await state.clear()
+    if total_seconds > max_time:
+        await message.reply("❌ Интервал не может быть больше 72 часов", reply_markup=kb.back_to_settings)
         return
 
     db.set_settings(user_id, "interval", total_seconds)
@@ -313,7 +307,6 @@ async def save_number_of_posts(message, state: FSMContext):
     text = message.text.strip()
     if not text.isdigit():
         await message.reply("❌ Количество постов должно быть числом", reply_markup=kb.back_to_settings)
-        await state.clear()
         return
     db.set_settings(user_id, "number_of_posts", int(text))
     await message.reply(f"✅ изменено на <b>{text}</b>!", parse_mode="HTML", reply_markup=kb.back_to_settings)
@@ -363,7 +356,6 @@ async def save_min_post_age(message, state: FSMContext):
 
     if total_seconds > 86400:
         await message.reply("❌ минимальный возраст поста не может быть больше 24 часов", reply_markup=kb.back_to_settings)
-        await state.clear()
         return
 
     db.set_settings(user_id, "min_post_age", total_seconds)

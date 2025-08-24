@@ -4,6 +4,7 @@ delay_for_channel = 3
 monitor_interval = 60
 default_delay = 3600
 default_min_forward_rate = 1
+max_time = 259200
 system_prompt_for_russian_market = """### Роль  
 Ты — профессиональный редактор новостных Telegram-каналов. Перерабатывай полученные посты, сохраняя суть, но делая текст уникальным и адаптированным под стиль целевого канала.
 
