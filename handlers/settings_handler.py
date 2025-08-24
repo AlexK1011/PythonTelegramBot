@@ -75,6 +75,12 @@ def parse_time(text: str) -> dict:
     elif groups[2] is not None:
         hours = int(groups[2])
         minutes = int(groups[3])
+        if minutes >= 60:
+            return {
+                "error": True,
+                "reply_text": "❌ Неверный формат времени\n\nИспользуйте:\n• Часы с дробью: 1.5 или 2,75"
+                          "\n• Часы и минуты: 1:30 или 2:45"
+            }
         total_seconds = hours * 3600 + minutes * 60
 
     return {
