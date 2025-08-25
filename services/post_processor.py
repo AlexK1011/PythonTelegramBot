@@ -25,10 +25,7 @@ class PostProcessor:
 
         user_settings = UserSettings(uid)
 
-        if user_settings.uid == 1278128637 or user_settings.uid == 252718031 or user_settings.uid == 283201225:
-            await self.russian_market_processing(user_settings)
-        else:
-            await self.default_processing(user_settings)
+        await self.default_processing(user_settings)
 
     async def need_to_send(self, min_forward_rate):
         post = await monitor_bot.get_messages(
@@ -53,11 +50,14 @@ class PostProcessor:
         message_html = self.post_info["html"]
         answer = message_html
         system_prompt = base_system_prompt + user_settings.system_prompt
-        if user_settings.ai_enabled:
+        if user_settings.ai_enabled and not self.post_info["is_media"]:
             try:
                 answer = await ask_local_model(message_html, system_prompt)
             except Exception as e:
                 logger.error(f"Ошибка ИИ (default_processing): {e}")
+
+        if self.post_info["is_media"]:
+            answer = f"медиа сообщение в канале {self.post_info['channel_title']}"
 
         text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
                                   forward_rate, forwards)
@@ -67,7 +67,7 @@ class PostProcessor:
             return
 
         try:
-            message = await bot.send_message(user_settings.uid, answer, parse_mode="HTML")
+            message = await bot.send_message(user_settings.uid, answer, parse_mode="HTML", disable_web_page_preview=True)
             await message.reply(text_from, parse_mode="HTML", disable_web_page_preview=True)
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")

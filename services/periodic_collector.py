@@ -60,7 +60,12 @@ async def _user_periodic_collector(user_id: int):
                         forward_rate = (forwards / views) * 100 if views else 0.0
                         text_html = post.text.html if post.text is not None else None
                         cap_html = post.caption.html if post.caption is not None else None
-                        message_html = text_html or cap_html or "Медиа-сообщение"
+                        is_media = False
+                        message_html = ""
+                        if not text_html and not cap_html:
+                            is_media = True
+                        else:
+                            message_html = text_html or cap_html
                         channel_title = (
                             getattr(getattr(post, "chat", None), "title", None)
                             or "Неизвестный канал"
@@ -71,7 +76,8 @@ async def _user_periodic_collector(user_id: int):
                             "channel_id": username,
                             "post_id": post_id,
                             "html": message_html,
-                            "message_text": post.text or post.caption or "Медиа-сообщение",
+                            "is_media": is_media,
+                            "message_text": message_html,
                             "message_link": f"https://t.me/{username}/{post_id}",
                             "channel_title": post.chat.title,
                             "views": views,
@@ -156,6 +162,12 @@ async def process_single_post(settings, post):
     """
     Обрабатывает один пост и возвращает готовый ответ
     """
+    if post["is_media"]:
+        return {
+            "answer": f"медиа сообщение в канале {post['channel_title']}",
+            "text_from": get_text_from(post["message_link"], post["channel_title"],
+                                       post["forward_rate"], post["forwards"])
+        }
     try:
         answer = await process_post(settings, post)
         return {
