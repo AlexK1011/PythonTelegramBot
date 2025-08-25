@@ -41,12 +41,13 @@ async def _user_periodic_collector(user_id: int):
                     break
 
                 interval = int(settings.get("interval", 3600))
+                min_post_age = int(settings.get("min_post_age", 0))
                 formated_time = format_time(interval)
                 number_of_posts = int(settings.get("number_of_posts", 5))
                 logger.debug("засыпаем. пользователь %s", user_id)
                 await asyncio.sleep(interval)
                 logger.debug("проснулись. пользователь %s", user_id)
-                new_posts = db.get_posts(user_id, interval)
+                new_posts = db.get_posts(user_id, interval, min_post_age)
                 posts = []
                 for post_id, username in new_posts:
                     try:

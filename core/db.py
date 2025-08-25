@@ -305,7 +305,7 @@ def set_post(channel_id, post_id):
         conn.commit()
 
 
-def get_posts(user_id, interval):
+def get_posts(user_id, interval, min_post_age):
     with closing(get_connection()) as conn:
         c = conn.cursor()
         c.execute(
@@ -317,8 +317,9 @@ def get_posts(user_id, interval):
                FROM posts_history
                         JOIN channels ON channels.id = posts_history.channel_id
                WHERE posts_history.channel_id IN (SELECT channel_id FROM subscriptions WHERE user_id = ?)
-                 AND posts_history.post_time > (strftime('%s', 'now') - ?)""",
-            (user_id, interval)
+                 AND posts_history.post_time <= (strftime('%s', 'now') - ?)
+                 AND posts_history.post_time > (strftime('%s', 'now') - ? - ?)""",
+            (user_id, min_post_age, interval, min_post_age)
         )
 
         return c.fetchall()
