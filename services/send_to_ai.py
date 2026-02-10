@@ -1,83 +1,122 @@
+import collections
+import random
+import time
 import os
 import asyncio
 import httpx
 from dotenv import load_dotenv
+import json
+
+from core.config import rate_limit, time_window, base_delay
 from core.logger_config import logger
 
 load_dotenv()
 
-# Настройки Ollama
-OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")  # Измените на вашу модель
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", -1))  # Перенесено из config
+MODEL_NAME = os.getenv("GEN_MODEL", "deepseek-v3")
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", -1))
+API_URL = os.getenv("GEN_API_URL", "https://api.gen-api.ru/api/v1/networks/deepseek-v3")
+API_KEY = os.getenv("GEN_API_KEY")
 MAX_RETRIES = 3
 BASE_DELAY = 1.0
 
+_call_times = collections.deque()
+_rate_lock = asyncio.Lock()
 
-async def ask_local_model(text, system_prompt) -> str:
+async def _rate_limit():
+    async with _rate_lock:
+        now = time.monotonic()
+        while _call_times and now - _call_times[0] > time_window:
+            _call_times.popleft()
+
+        if len(_call_times) >= rate_limit:
+            sleep_for = time_window - (now - _call_times[0]) + 0.01
+            await asyncio.sleep(max(sleep_for, 0))
+
+        _call_times.append(time.monotonic())
+
+
+async def ask_gen_api(text, system_prompt) -> str:
     """Отправляет запрос к локальной модели Ollama"""
+    if not API_KEY:
+        raise RuntimeError("GEN_API_KEY не задан")
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {API_KEY}",
+    }
+
     payload = {
         "model": MODEL_NAME,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": str(text)},
         ],
-        "options": {
-            "num_predict": MAX_TOKENS
-        },
-        "stream": False
+        "max_tokens": MAX_TOKENS if MAX_TOKENS > 0 else None,
+        "stream": False,
+        "is_sync": True,
     }
 
-    async with httpx.AsyncClient(timeout=None) as client:
+    # Убираем None значения из payload
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, read=None)) as client:
+        last_resp = None
         for attempt in range(MAX_RETRIES):
+            await _rate_limit()
             try:
-                logger.debug(f"Запрос к локальной модели {MODEL_NAME}")
-                logger.debug(f"{text} {system_prompt[:20]}...")
-                resp = await client.post(OLLAMA_URL, json=payload)
+                logger.debug(f"Отправляем запрос к {API_URL} (попытка {attempt + 1})")
+                resp = await client.post(API_URL, headers=headers, json=payload)
+                last_resp = resp
+
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        # logger.debug(f"Ответ успешно получен: {data}")
+                    except json.JSONDecodeError:
+                        logger.error(f"Невалидный JSON ответ: {resp.text}")
+                        raise
+
+                    answer = data["response"][0]["choices"][0]["message"]["content"]
+
+                    logger.debug("Ответ успешно получен")
+                    return answer
+
+                # Обработка ошибок
+                logger.warning(f"Статус код {resp.status_code}: {resp.text}")
+
+                if resp.status_code == 429:
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after and retry_after.isdigit():
+                        delay = int(retry_after)
+                    else:
+                        delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                    await asyncio.sleep(delay)
+                    continue
+
+                if 500 <= resp.status_code < 600:
+                    await asyncio.sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
+                    continue
+
                 resp.raise_for_status()
 
-                data = resp.json()
-                answer = data["message"]["content"]
-                logger.debug("Успешный ответ от модели")
-                print(answer)
-                return answer
-
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    logger.error(f"Модель {MODEL_NAME} не найдена")
-                    raise ValueError(f"Модель {MODEL_NAME} недоступна") from e
-
-                logger.warning(f"HTTP ошибка: {str(e)}, попытка {attempt + 1}/{MAX_RETRIES}")
-                await asyncio.sleep(BASE_DELAY * (2 ** attempt))
-
-            except (httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError) as e:
-                logger.warning(f"Сетевая ошибка: {str(e)}, попытка {attempt + 1}/{MAX_RETRIES}")
-                await asyncio.sleep(BASE_DELAY * (2 ** attempt))
-
-            except Exception as e:
-                logger.error(f"Неожиданная ошибка: {str(e)}")
+            except (httpx.TimeoutException, httpx.NetworkError, json.JSONDecodeError, ValueError) as e:
                 if attempt == MAX_RETRIES - 1:
                     raise
-                await asyncio.sleep(BASE_DELAY * (2 ** attempt))
+                await asyncio.sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
 
-        raise RuntimeError("Не удалось получить ответ после ретраев")
+        if last_resp is not None:
+            last_resp.raise_for_status()
+        raise RuntimeError("Не удалось получить ответ от gen-api.ru после ретраев.")
 
 
-async def test_local_model():
+async def test_gen_api():
     """Тестовая функция для проверки работы с локальной моделью"""
     prompt = "Привет! Как тебя зовут и что ты умеешь?"
     system_prompt = "Ты полезный AI-ассистент. Отвечай на русском языке."
 
     try:
-        start_time = asyncio.get_event_loop().time()
-        response = await ask_local_model(prompt, system_prompt)
-        elapsed = asyncio.get_event_loop().time() - start_time
+        response = await ask_gen_api(prompt, system_prompt)
 
-        print(f"\n{'=' * 40}")
-        print(f"Модель: {MODEL_NAME}")
-        print(f"Время ответа: {elapsed:.2f} сек")
-        print(f"Ответ:\n{response}")
-        print(f"{'=' * 40}\n")
         return response
 
     except Exception as e:
@@ -85,23 +124,13 @@ async def test_local_model():
         return f"Ошибка: {str(e)}"
 
 
-def check_ollama_connection():
-    """Проверяет доступность Ollama сервера"""
-    try:
-        response = httpx.get("http://localhost:11434", timeout=5.0)
-        if response.status_code == 200:
-            return True, "✅ Ollama сервер доступен"
-        return False, f"⚠️ Ollama сервер недоступен (код: {response.status_code})"
-    except Exception as e:
-        return False, f"❌ Ошибка подключения: {str(e)}"
 
-
-async def test():
+async def test_parallel_requests():
     prompt = "привет, как у тебя дела?"
     system_prompt = "Ты полезный AI-ассистент. Отвечай на русском языке."
     tasks = []
     for i in range(5):
-        task = asyncio.create_task(ask_local_model(prompt, system_prompt))
+        task = asyncio.create_task(ask_gen_api(prompt, system_prompt))
         tasks.append(task)
 
     # Ждем завершения всех задач
@@ -110,23 +139,8 @@ async def test():
         print(result)
         print("=" * 40)
 
+
+
 if __name__ == "__main__":
-    # Проверка подключения
-    # status, message = check_ollama_connection()
-    # print(message)
-    #
-    # if "доступен" in message:
-    #     # Получение информации о доступных моделях
-    #     try:
-    #         models = httpx.get("http://localhost:11434/api/tags").json().get("models", [])
-    #         print("\nДоступные модели:")
-    #         for model in models:
-    #             print(f"  - {model['name']} (размер: {model.get('size', 'N/A')})")
-    #     except Exception:
-    #         print("Не удалось получить список моделей")
-    #
-    #     # Запуск теста
-    #     asyncio.run(test_local_model())
-
-
-    asyncio.run(test())
+    response = asyncio.run(test_gen_api())
+    print(response)

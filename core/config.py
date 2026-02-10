@@ -186,8 +186,8 @@ def get_text_from(message_link, channel_title, forward_rate, forwards):
             f"Процент репостов: <b>{round(forward_rate, 2)}%</b>\nВсего поделились: <b>{forwards} раз</b>")
 
 
-rate_limit = 10
-time_window = 10
+rate_limit = 300
+time_window = 60
 max_tokens = 33000
 max_retries = 5
 base_delay = 1

@@ -5,7 +5,7 @@ import core.db as db
 from utils.UserSettings import UserSettings
 from utils.bots import monitor_bot, bot
 from core.logger_config import logger
-from services.send_to_ai import ask_local_model
+from services.send_to_ai import ask_gen_api
 from core.config import default_delay, system_prompt_for_russian_market, get_text_from, base_system_prompt
 
 
@@ -52,7 +52,7 @@ class PostProcessor:
         system_prompt = base_system_prompt + user_settings.system_prompt
         if user_settings.ai_enabled and not self.post_info["is_media"]:
             try:
-                answer = await ask_local_model(message_html, system_prompt)
+                answer = await ask_gen_api(message_html, system_prompt)
             except Exception as e:
                 logger.error(f"Ошибка ИИ (default_processing): {e}")
 
@@ -72,48 +72,48 @@ class PostProcessor:
         except Exception as e:
             logger.error(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")
 
-    async def russian_market_processing(self, user_settings):
-        post_text = ''
-        text = self.post_info["message_text"]
-        is_need_to_send, forward_rate, forwards = await self.need_to_send(user_settings.min_forward_rate)
-        logger.debug(f"отправим: {is_need_to_send}. пользователь {user_settings.uid}")
-        if not is_need_to_send:
-            return
-        tries = 0
-
-        for i in range(3):
-            try:
-                answer = await ask_local_model(text, system_prompt_for_russian_market)
-            except Exception as e:
-                logger.error(f"Ошибка ИИ (russian_market_processing): {e}")
-                answer = text
-            safe_response = html.escape(answer)
-
-            match = re.search(r'\|\|%HEADER%\|\|(.+?)\|\|%HEADER%\|\|(.*)', safe_response, re.DOTALL)
-
-            if match:
-                header = match.group(1).strip()
-                body = match.group(2).strip()
-                post_text = f"<b>{header}</b>\n\n{body}"
-                post_text += "\n\n<a href='https://t.me/russianmarkt'>Russian Market</a>"
-                break
-            else:
-                tries += 1
-                if tries == 3:
-                    post_text = answer
-                else:
-                    continue
-
-        text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
-                                  forward_rate, forwards)
-
-        mode = db.get_settings(user_settings.uid).get("mode", "delayed_check")
-        if mode == "periodic_collection":
-            return
-
-        try:
-            message = await bot.send_message(user_settings.uid, post_text[:4096], parse_mode="HTML",
-                                             disable_web_page_preview=True)
-            await message.reply(text_from, parse_mode="HTML", disable_web_page_preview=True)
-        except Exception as e:
-            logger.error(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")
+    # async def russian_market_processing(self, user_settings):
+    #     post_text = ''
+    #     text = self.post_info["message_text"]
+    #     is_need_to_send, forward_rate, forwards = await self.need_to_send(user_settings.min_forward_rate)
+    #     logger.debug(f"отправим: {is_need_to_send}. пользователь {user_settings.uid}")
+    #     if not is_need_to_send:
+    #         return
+    #     tries = 0
+    #
+    #     for i in range(3):
+    #         try:
+    #             answer = await ask_gen_api(text, system_prompt_for_russian_market)
+    #         except Exception as e:
+    #             logger.error(f"Ошибка ИИ (russian_market_processing): {e}")
+    #             answer = text
+    #         safe_response = html.escape(answer)
+    #
+    #         match = re.search(r'\|\|%HEADER%\|\|(.+?)\|\|%HEADER%\|\|(.*)', safe_response, re.DOTALL)
+    #
+    #         if match:
+    #             header = match.group(1).strip()
+    #             body = match.group(2).strip()
+    #             post_text = f"<b>{header}</b>\n\n{body}"
+    #             post_text += "\n\n<a href='https://t.me/russianmarkt'>Russian Market</a>"
+    #             break
+    #         else:
+    #             tries += 1
+    #             if tries == 3:
+    #                 post_text = answer
+    #             else:
+    #                 continue
+    #
+    #     text_from = get_text_from(self.post_info["message_link"], self.post_info["channel_title"],
+    #                               forward_rate, forwards)
+    #
+    #     mode = db.get_settings(user_settings.uid).get("mode", "delayed_check")
+    #     if mode == "periodic_collection":
+    #         return
+    #
+    #     try:
+    #         message = await bot.send_message(user_settings.uid, post_text[:4096], parse_mode="HTML",
+    #                                          disable_web_page_preview=True)
+    #         await message.reply(text_from, parse_mode="HTML", disable_web_page_preview=True)
+    #     except Exception as e:
+    #         logger.error(f"Ошибка отправки сообщения пользователю {user_settings.uid}: {e}")

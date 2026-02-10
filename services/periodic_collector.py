@@ -5,7 +5,7 @@ import core.db as db
 from utils.bots import monitor_bot, bot
 from core.config import get_text_from, base_system_prompt
 from core.logger_config import logger
-from services.send_to_ai import ask_local_model
+from services.send_to_ai import ask_gen_api
 
 # Хранилище фоновых задач по пользователям
 _user_tasks = {}
@@ -188,7 +188,7 @@ async def process_post(settings, post):
     answer = message_html
     if ai_enabled:
         try:
-            answer = await ask_local_model(message_html, system_prompt)
+            answer = await ask_gen_api(message_html, system_prompt)
         except Exception as e:
             logger.error(f"Ошибка ИИ: {e}")
 
